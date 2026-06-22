@@ -1,4 +1,4 @@
-// PRO-CTCAE Korean Item Library Version 1.0
+﻿// PRO-CTCAE Korean Item Library Version 1.0
 // NCI Patient-Reported Outcomes version of the Common Terminology Criteria for Adverse Events
 
 export type QuestionType = "frequency" | "severity" | "interference" | "presence";
@@ -30,13 +30,13 @@ export const SURVEY_ITEMS: SurveyItem[] = [
   {
     id: 1,
     termEn: "Dry mouth",
-    termKo: "구강 건조증",
-    category: "구강 및 소화기계",
+    termKo: "입마름",
+    category: "구강",
     questions: [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 구강 건조증이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 입마름이 얼마나 심했습니까?",
       },
     ],
   },
@@ -44,12 +44,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 2,
     termEn: "Difficulty swallowing",
     termKo: "삼키기 어려움",
-    category: "구강 및 소화기계",
+    category: "구강",
     questions: [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 삼키기 어려움이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 삼키기 어려움이 얼마나 심했습니까?",
       },
     ],
   },
@@ -57,17 +57,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 3,
     termEn: "Mouth/throat sores",
     termKo: "구강이나 인후 궤양이나 염증 (점막염)",
-    category: "구강 및 소화기계",
+    category: "구강",
     questions: [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 구강이나 인후 궤양이나 염증이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 구강이나 인후 궤양이나 염증이 얼마나 심했습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 구강이나 인후 궤양이나 염증이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 구강이나 인후 궤양이나 염증이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -75,12 +75,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 4,
     termEn: "Cracking at the corners of the mouth (cheilosis/cheilitis)",
     termKo: "입술 양쪽 귀퉁이가 트거나 갈라짐",
-    category: "구강 및 소화기계",
+    category: "구강",
     questions: [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 입술 양쪽 귀퉁이가 트거나 갈라지는 것이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 입술 양쪽 귀퉁이가 트거나 갈라지는 것이 얼마나 심했습니까?",
       },
     ],
   },
@@ -88,12 +88,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 5,
     termEn: "Voice quality changes",
     termKo: "목소리 변화",
-    category: "구강 및 소화기계",
+    category: "구강",
     questions: [
       {
         key: "a",
         type: "presence",
-        text: "지난 7일 동안, 목소리의 변화가 있었습니까?",
+        text: "지난 일주일 동안, 목소리의 변화가 있었습니까?",
       },
     ],
   },
@@ -101,12 +101,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 6,
     termEn: "Hoarseness",
     termKo: "쉰 목소리",
-    category: "구강 및 소화기계",
+    category: "구강",
     questions: [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 쉰 목소리가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 쉰 목소리가 얼마나 심했습니까?",
       },
     ],
   },
@@ -114,12 +114,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 7,
     termEn: "Taste changes",
     termKo: "맛이나 냄새에 대한 미각이나 후각의 변화",
-    category: "구강 및 소화기계",
+    category: "구강",
     questions: [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 맛이나 냄새에 대한 미각이나 후각의 변화가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 맛이나 냄새에 대한 미각이나 후각의 변화가 얼마나 심했습니까?",
       },
     ],
   },
@@ -127,17 +127,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 8,
     termEn: "Decreased appetite",
     termKo: "식욕 감소",
-    category: "구강 및 소화기계",
+    category: "소화기계",
     questions: [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 식욕 감소가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 식욕 감소가 얼마나 심했습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 식욕 감소가 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 식욕 감소가 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -145,17 +145,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 9,
     termEn: "Nausea",
     termKo: "메스꺼움",
-    category: "구강 및 소화기계",
+    category: "소화기계",
     questions: [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 메스꺼움이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 메스꺼움이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 메스꺼움이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 메스꺼움이 얼마나 심했습니까?",
       },
     ],
   },
@@ -163,17 +163,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 10,
     termEn: "Vomiting",
     termKo: "구토 (토하거나 욕지기)",
-    category: "구강 및 소화기계",
+    category: "소화기계",
     questions: [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 구토를 얼마나 자주 하였습니까?",
+        text: "지난 일주일 동안, 구토를 얼마나 자주 하였습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 구토가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 구토가 얼마나 심했습니까?",
       },
     ],
   },
@@ -181,17 +181,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 11,
     termEn: "Heartburn",
     termKo: "속쓰림",
-    category: "구강 및 소화기계",
+    category: "소화기계",
     questions: [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 속 쓰림이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 속 쓰림이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 속 쓰림이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 속 쓰림이 얼마나 심했습니까?",
       },
     ],
   },
@@ -199,12 +199,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 12,
     termEn: "Gas",
     termKo: "가스(방귀)가 증가하거나 트림이 많아짐",
-    category: "구강 및 소화기계",
+    category: "소화기계",
     questions: [
       {
         key: "a",
         type: "presence",
-        text: "지난 7일 동안, 복부 내 가스 증가나 트림이 많아진 적이 있었습니까?",
+        text: "지난 일주일 동안, 복부 내 가스 증가나 트림이 많아진 적이 있었습니까?",
       },
     ],
   },
@@ -212,17 +212,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 13,
     termEn: "Bloating",
     termKo: "복부 팽만감 (배에 가스가 찬 것처럼 배가 불룩해짐)",
-    category: "구강 및 소화기계",
+    category: "소화기계",
     questions: [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 복부 팽만감이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 복부 팽만감이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 복부 팽만감이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 복부 팽만감이 얼마나 심했습니까?",
       },
     ],
   },
@@ -230,17 +230,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 14,
     termEn: "Hiccups",
     termKo: "딸꾹질",
-    category: "구강 및 소화기계",
+    category: "소화기계",
     questions: [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 딸꾹질이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 딸꾹질이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 딸꾹질이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 딸꾹질이 얼마나 심했습니까?",
       },
     ],
   },
@@ -248,12 +248,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 15,
     termEn: "Constipation",
     termKo: "변비",
-    category: "구강 및 소화기계",
+    category: "소화기계",
     questions: [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 변비가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 변비가 얼마나 심했습니까?",
       },
     ],
   },
@@ -261,12 +261,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 16,
     termEn: "Diarrhea",
     termKo: "설사 (묽은 변)",
-    category: "구강 및 소화기계",
+    category: "소화기계",
     questions: [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 설사가 있거나 묽은 변을 본 적이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 설사가 있거나 묽은 변을 본 적이 얼마나 자주 있었습니까?",
       },
     ],
   },
@@ -274,22 +274,22 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 17,
     termEn: "Abdominal pain",
     termKo: "복통",
-    category: "구강 및 소화기계",
+    category: "소화기계",
     questions: [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 복통이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 복통이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 복통이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 복통이 얼마나 심했습니까?",
       },
       {
         key: "c",
         type: "interference",
-        text: "지난 7일 동안, 복통이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 복통이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -297,17 +297,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 18,
     termEn: "Fecal incontinence",
     termKo: "변실금",
-    category: "구강 및 소화기계",
+    category: "소화기계",
     questions: [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 변실금이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 변실금이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 변실금이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 변실금이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -317,17 +317,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 19,
     termEn: "Shortness of breath",
     termKo: "호흡 곤란",
-    category: "호흡기 및 심혈관계",
+    category: "호흡기",
     questions: [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 호흡 곤란이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 호흡 곤란이 얼마나 심했습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 호흡 곤란이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 호흡 곤란이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -335,17 +335,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 20,
     termEn: "Cough",
     termKo: "기침",
-    category: "호흡기 및 심혈관계",
+    category: "호흡기",
     questions: [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 기침이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 기침이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 기침이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 기침이 얼마나 심했습니까?",
       },
     ],
   },
@@ -353,12 +353,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 21,
     termEn: "Wheezing",
     termKo: "천명음 (쌕쌕거리는 소리)",
-    category: "호흡기 및 심혈관계",
+    category: "호흡기",
     questions: [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 천명음(쌕쌕거리는 소리)이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 천명음(쌕쌕거리는 소리)이 얼마나 심했습니까?",
       },
     ],
   },
@@ -366,22 +366,22 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 22,
     termEn: "Swelling",
     termKo: "부종 (몸이 붓는 것)",
-    category: "호흡기 및 심혈관계",
+    category: "심혈관계",
     questions: [
       {
         key: "a",
         type: "presence",
-        text: "지난 7일 동안, 몸이 붓는 증상이 있었습니까?",
+        text: "지난 일주일 동안, 몸이 붓는 증상이 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 부종이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 부종이 얼마나 심했습니까?",
       },
       {
         key: "c",
         type: "interference",
-        text: "지난 7일 동안, 부종이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 부종이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -389,17 +389,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
     id: 23,
     termEn: "Heart palpitations",
     termKo: "심계항진 (두근거림)",
-    category: "호흡기 및 심혈관계",
+    category: "심혈관계",
     questions: [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 심계항진(두근거림)이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 심계항진(두근거림)이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 심계항진(두근거림)이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 심계항진(두근거림)이 얼마나 심했습니까?",
       },
     ],
   },
@@ -414,7 +414,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 발진이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 발진이 얼마나 심했습니까?",
       },
     ],
   },
@@ -427,7 +427,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 피부 건조가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 피부 건조가 얼마나 심했습니까?",
       },
     ],
   },
@@ -440,7 +440,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 여드름이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 여드름이 얼마나 심했습니까?",
       },
     ],
   },
@@ -453,7 +453,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 탈모가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 탈모가 얼마나 심했습니까?",
       },
     ],
   },
@@ -466,7 +466,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 가려움증이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 가려움증이 얼마나 심했습니까?",
       },
     ],
   },
@@ -479,7 +479,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 두드러기가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 두드러기가 얼마나 심했습니까?",
       },
     ],
   },
@@ -492,7 +492,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 수족 증후군이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 수족 증후군이 얼마나 심했습니까?",
       },
     ],
   },
@@ -505,7 +505,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 손발톱 빠짐이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 손발톱 빠짐이 얼마나 심했습니까?",
       },
     ],
   },
@@ -518,7 +518,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 손발톱 융기가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 손발톱 융기가 얼마나 심했습니까?",
       },
     ],
   },
@@ -531,7 +531,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "presence",
-        text: "지난 7일 동안, 손발톱 색이 변했습니까?",
+        text: "지난 일주일 동안, 손발톱 색이 변했습니까?",
       },
     ],
   },
@@ -544,7 +544,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 햇빛 민감성이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 햇빛 민감성이 얼마나 심했습니까?",
       },
     ],
   },
@@ -557,7 +557,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 욕창 또는 압박 궤양이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 욕창 또는 압박 궤양이 얼마나 심했습니까?",
       },
     ],
   },
@@ -570,7 +570,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 방사선 피부 반응이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 방사선 피부 반응이 얼마나 심했습니까?",
       },
     ],
   },
@@ -583,7 +583,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "presence",
-        text: "지난 7일 동안, 피부가 어두워지는 색소 침착이 있었습니까?",
+        text: "지난 일주일 동안, 피부가 어두워지는 색소 침착이 있었습니까?",
       },
     ],
   },
@@ -596,7 +596,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "presence",
-        text: "지난 7일 동안, 튼살이 있었습니까?",
+        text: "지난 일주일 동안, 튼살이 있었습니까?",
       },
     ],
   },
@@ -611,12 +611,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 저림이나 따끔따끔한 감각 이상이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 저림이나 따끔따끔한 감각 이상이 얼마나 심했습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 감각 이상이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 감각 이상이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -629,12 +629,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 어지럼증이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 어지럼증이 얼마나 심했습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 어지럼증이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 어지럼증이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -647,12 +647,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 시야 흐림이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 시야 흐림이 얼마나 심했습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 시야 흐림이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 시야 흐림이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -665,7 +665,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "presence",
-        text: "지난 7일 동안, 눈 앞에 번쩍이는 빛(섬광)이 있었습니까?",
+        text: "지난 일주일 동안, 눈 앞에 번쩍이는 빛(섬광)이 있었습니까?",
       },
     ],
   },
@@ -678,7 +678,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "presence",
-        text: "지난 7일 동안, 눈 앞에 떠다니는 물체(날파리증)가 있었습니까?",
+        text: "지난 일주일 동안, 눈 앞에 떠다니는 물체(날파리증)가 있었습니까?",
       },
     ],
   },
@@ -691,12 +691,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 눈물 흘림이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 눈물 흘림이 얼마나 심했습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 눈물 흘림이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 눈물 흘림이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -709,7 +709,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 이명(귀울림)이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 이명(귀울림)이 얼마나 심했습니까?",
       },
     ],
   },
@@ -722,12 +722,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 집중하는 것이 얼마나 어려웠습니까?",
+        text: "지난 일주일 동안, 집중하는 것이 얼마나 어려웠습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 집중력 저하가 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 집중력 저하가 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -740,12 +740,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 기억력 저하가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 기억력 저하가 얼마나 심했습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 기억력 저하가 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 기억력 저하가 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -760,17 +760,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 통증이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 통증이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 통증이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 통증이 얼마나 심했습니까?",
       },
       {
         key: "c",
         type: "interference",
-        text: "지난 7일 동안, 통증이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 통증이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -783,17 +783,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 두통이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 두통이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 두통이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 두통이 얼마나 심했습니까?",
       },
       {
         key: "c",
         type: "interference",
-        text: "지난 7일 동안, 두통이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 두통이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -806,17 +806,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 근육통이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 근육통이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 근육통이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 근육통이 얼마나 심했습니까?",
       },
       {
         key: "c",
         type: "interference",
-        text: "지난 7일 동안, 근육통이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 근육통이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -829,17 +829,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 관절통이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 관절통이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 관절통이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 관절통이 얼마나 심했습니까?",
       },
       {
         key: "c",
         type: "interference",
-        text: "지난 7일 동안, 관절통이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 관절통이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -854,12 +854,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 불면증이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 불면증이 얼마나 심했습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 불면증이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 불면증이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -872,12 +872,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 피로감이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 피로감이 얼마나 심했습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 피로감이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 피로감이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -890,17 +890,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 불안감이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 불안감이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 불안감이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 불안감이 얼마나 심했습니까?",
       },
       {
         key: "c",
         type: "interference",
-        text: "지난 7일 동안, 불안감이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 불안감이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -913,17 +913,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 낙담감이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 낙담감이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 낙담감이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 낙담감이 얼마나 심했습니까?",
       },
       {
         key: "c",
         type: "interference",
-        text: "지난 7일 동안, 낙담감이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 낙담감이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -936,17 +936,17 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 슬픔이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 슬픔이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 슬픔이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 슬픔이 얼마나 심했습니까?",
       },
       {
         key: "c",
         type: "interference",
-        text: "지난 7일 동안, 슬픔이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 슬픔이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -961,7 +961,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "presence",
-        text: "지난 7일 동안, 불규칙한 생리 또는 예상치 못한 질 출혈이 있었습니까?",
+        text: "지난 일주일 동안, 불규칙한 생리 또는 예상치 못한 질 출혈이 있었습니까?",
       },
     ],
   },
@@ -974,7 +974,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "presence",
-        text: "지난 7일 동안, 예상했던 생리가 없었습니까?",
+        text: "지난 일주일 동안, 예상했던 생리가 없었습니까?",
       },
     ],
   },
@@ -987,7 +987,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 질 분비물이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 질 분비물이 얼마나 심했습니까?",
       },
     ],
   },
@@ -1000,7 +1000,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 질 건조가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 질 건조가 얼마나 심했습니까?",
       },
     ],
   },
@@ -1015,7 +1015,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 소변 볼 때 통증이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 소변 볼 때 통증이 얼마나 심했습니까?",
       },
     ],
   },
@@ -1028,12 +1028,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 소변이 갑자기 급하게 마려운 요절박이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 소변이 갑자기 급하게 마려운 요절박이 얼마나 심했습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 요절박이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 요절박이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -1046,12 +1046,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 평상시보다 소변을 자주 보았습니까?",
+        text: "지난 일주일 동안, 평상시보다 소변을 자주 보았습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 빈뇨가 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 빈뇨가 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -1064,7 +1064,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "presence",
-        text: "지난 7일 동안, 평소와 다른 소변 색깔이 있었습니까?",
+        text: "지난 일주일 동안, 평소와 다른 소변 색깔이 있었습니까?",
       },
     ],
   },
@@ -1077,12 +1077,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 소변이 새는 요실금이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 소변이 새는 요실금이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "interference",
-        text: "지난 7일 동안, 요실금이 일상생활에 얼마나 영향을 미쳤습니까?",
+        text: "지난 일주일 동안, 요실금이 일상생활에 얼마나 영향을 미쳤습니까?",
       },
     ],
   },
@@ -1097,7 +1097,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 발기를 유지하는 것이 얼마나 어려웠습니까?",
+        text: "지난 일주일 동안, 발기를 유지하는 것이 얼마나 어려웠습니까?",
       },
     ],
   },
@@ -1110,7 +1110,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 사정이 얼마나 어려웠습니까?",
+        text: "지난 일주일 동안, 사정이 얼마나 어려웠습니까?",
       },
     ],
   },
@@ -1123,7 +1123,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 성욕 감소가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 성욕 감소가 얼마나 심했습니까?",
       },
     ],
   },
@@ -1136,7 +1136,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 오르가즘 지연이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 오르가즘 지연이 얼마나 심했습니까?",
       },
     ],
   },
@@ -1149,7 +1149,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "presence",
-        text: "지난 7일 동안, 오르가즘을 경험하지 못했습니까?",
+        text: "지난 일주일 동안, 오르가즘을 경험하지 못했습니까?",
       },
     ],
   },
@@ -1162,7 +1162,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 성관계 시 통증이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 성관계 시 통증이 얼마나 심했습니까?",
       },
     ],
   },
@@ -1177,7 +1177,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 유방 팽창 및 압통이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 유방 팽창 및 압통이 얼마나 심했습니까?",
       },
     ],
   },
@@ -1190,7 +1190,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 멍이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 멍이 얼마나 심했습니까?",
       },
     ],
   },
@@ -1203,12 +1203,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 오한이 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 오한이 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 오한이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 오한이 얼마나 심했습니까?",
       },
     ],
   },
@@ -1221,12 +1221,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 땀이 많이 나는 발한 증가가 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 땀이 많이 나는 발한 증가가 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 발한 증가가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 발한 증가가 얼마나 심했습니까?",
       },
     ],
   },
@@ -1239,7 +1239,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 발한 감소가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 발한 감소가 얼마나 심했습니까?",
       },
     ],
   },
@@ -1252,12 +1252,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 안면홍조(열감)가 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 안면홍조(열감)가 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 안면홍조(열감)가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 안면홍조(열감)가 얼마나 심했습니까?",
       },
     ],
   },
@@ -1270,12 +1270,12 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "frequency",
-        text: "지난 7일 동안, 코피가 얼마나 자주 있었습니까?",
+        text: "지난 일주일 동안, 코피가 얼마나 자주 있었습니까?",
       },
       {
         key: "b",
         type: "severity",
-        text: "지난 7일 동안, 코피가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 코피가 얼마나 심했습니까?",
       },
     ],
   },
@@ -1288,7 +1288,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 주사 부위의 통증, 부종, 발적이 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 주사 부위의 통증, 부종, 발적이 얼마나 심했습니까?",
       },
     ],
   },
@@ -1301,7 +1301,7 @@ export const SURVEY_ITEMS: SurveyItem[] = [
       {
         key: "a",
         type: "severity",
-        text: "지난 7일 동안, 체취 변화가 얼마나 심했습니까?",
+        text: "지난 일주일 동안, 체취 변화가 얼마나 심했습니까?",
       },
     ],
   },
