@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: "Pretendard", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  }
+}
+
+@layer components {
+  .radio-option {
+    @apply flex flex-col items-center gap-1 cursor-pointer;
+  }
+  .radio-option input[type="radio"] {
+    @apply sr-only;
+  }
+  .radio-option .radio-label {
+    @apply flex flex-col items-center gap-2 px-2 py-3 rounded-xl border-2 border-gray-200
+           transition-all duration-150 w-full text-center text-sm
+           hover:border-primary-400 hover:bg-primary-50;
+  }
+  .radio-option input[type="radio"]:checked + .radio-label {
+    @apply border-primary-600 bg-primary-100 text-primary-900 font-semibold;
+  }
+}
