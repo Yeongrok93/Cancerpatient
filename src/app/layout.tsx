@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PRO-CTCAE 한국어 설문",
-  description:
-    "NCI 환자 보고 이상반응 공통 용어 기준(PRO-CTCAE) 한국어 설문 — 지난 7일간 치료 관련 증상을 평가합니다.",
+  title: "암증상설문조사",
+  description: "NCI PRO-CTCAE™ 한국어 암증상설문조사 — 지난 7일간 치료 관련 증상을 평가합니다.",
 };
 
 export default function RootLayout({
@@ -35,7 +34,7 @@ export default function RootLayout({
             <div>
               <p className="text-xs text-gray-500 leading-none">NCI PRO-CTCAE™</p>
               <p className="text-sm font-semibold text-gray-800 leading-tight">
-                암 치료 증상 설문
+                암증상설문조사
               </p>
             </div>
           </div>
