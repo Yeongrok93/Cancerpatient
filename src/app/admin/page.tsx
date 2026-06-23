@@ -7,6 +7,7 @@ import { SURVEY_ITEMS, RESPONSE_OPTIONS } from "@/lib/questions";
 type Session = {
   id: string;
   patient_code: string | null;
+  survey_type: string | null;
   age: number | null;
   gender: string | null;
   cancer_type: string | null;
@@ -23,6 +24,20 @@ type Answer = {
   answer_value: number | null;
   answer_boolean: boolean | null;
 };
+
+function SurveyTypeBadge({ type }: { type: string | null }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    pro_ctcae: { label: "PRO-CTCAE", cls: "bg-primary-100 text-primary-700" },
+    qlq_c30:   { label: "QLQ-C30",   cls: "bg-blue-100 text-blue-700" },
+    w0:        { label: "W0",         cls: "bg-emerald-100 text-emerald-700" },
+  };
+  const entry = type ? map[type] : null;
+  return entry ? (
+    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${entry.cls}`}>{entry.label}</span>
+  ) : (
+    <span className="text-gray-400 text-xs">—</span>
+  );
+}
 
 const GENDER_LABEL: Record<string, string> = {
   male: "남성",
@@ -142,8 +157,8 @@ export default function AdminPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">환자 코드</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">설문 유형</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">나이/성별</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">암 종류</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">시작일</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">상태</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">액션</th>
@@ -158,11 +173,13 @@ export default function AdminPage() {
                     }`}
                   >
                     <td className="px-4 py-3 font-mono text-xs">{s.patient_code ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <SurveyTypeBadge type={s.survey_type} />
+                    </td>
                     <td className="px-4 py-3 text-gray-600">
                       {s.age ? `${s.age}세` : "—"}{" "}
                       {s.gender ? `/ ${GENDER_LABEL[s.gender] ?? s.gender}` : ""}
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{s.cancer_type ?? "—"}</td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                       {formatDate(s.started_at)}
                     </td>

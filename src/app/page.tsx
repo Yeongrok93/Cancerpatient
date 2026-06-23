@@ -2,30 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
 
 export default function StartPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
   const [patientCode, setPatientCode] = useState("");
 
-  async function handleStart(e: React.FormEvent) {
+  function handleStart(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("survey_sessions")
-        .insert({ patient_code: patientCode || null })
-        .select("id")
-        .single();
-
-      if (error) throw error;
-      router.push(`/survey?session=${data.id}`);
-    } catch (err) {
-      console.error(err);
-      alert("오류가 발생했습니다. 다시 시도해 주세요.");
-      setLoading(false);
-    }
+    router.push(`/select?code=${encodeURIComponent(patientCode.trim())}`);
   }
 
   return (
@@ -36,7 +20,7 @@ export default function StartPage() {
       >
         <div className="text-center space-y-1">
           <h1 className="text-xl font-bold text-gray-900">암증상설문조사</h1>
-          <p className="text-sm text-gray-500">지난 7일간의 증상을 응답해 주십시오.</p>
+          <p className="text-sm text-gray-500">연구참여자번호를 입력하세요.</p>
         </div>
 
         <div className="space-y-2">
@@ -56,10 +40,10 @@ export default function StartPage() {
 
         <button
           type="submit"
-          disabled={loading || !patientCode.trim()}
+          disabled={!patientCode.trim()}
           className="w-full py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold rounded-xl transition-colors duration-150"
         >
-          {loading ? "시작 중..." : "설문 시작하기 →"}
+          다음 →
         </button>
       </form>
     </div>
