@@ -45,6 +45,11 @@ export default function StartPage() {
         >
           다음 →
         </button>
+
+        <p className="text-center text-xs text-gray-400">
+          처음 방문하셨나요?{" "}
+          <a href="/register" className="text-primary-600 hover:underline font-medium">참여신청하기</a>
+        </p>
       </form>
     </div>
   );

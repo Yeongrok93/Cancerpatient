@@ -56,12 +56,27 @@ function formatDate(iso: string) {
   });
 }
 
+type Participant = {
+  id: string;
+  name: string;
+  record_or_birth: string;
+  contact: string;
+  consent_agreed: boolean;
+  applied_at: string;
+  patient_code: string | null;
+};
+
 export default function AdminPage() {
+  const [tab, setTab] = useState<"surveys" | "participants">("surveys");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedAnswers, setSelectedAnswers] = useState<Answer[]>([]);
   const [answerLoading, setAnswerLoading] = useState(false);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [participantsLoading, setParticipantsLoading] = useState(false);
+  const [assigningId, setAssigningId] = useState<string | null>(null);
+  const [assignCode, setAssignCode] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -75,6 +90,28 @@ export default function AdminPage() {
     }
     load();
   }, []);
+
+  useEffect(() => {
+    if (tab !== "participants") return;
+    setParticipantsLoading(true);
+    supabase
+      .from("participants")
+      .select("*")
+      .order("applied_at", { ascending: false })
+      .limit(200)
+      .then(({ data }) => {
+        setParticipants(data ?? []);
+        setParticipantsLoading(false);
+      });
+  }, [tab]);
+
+  async function assignPatientCode(id: string, code: string) {
+    if (!code.trim()) return;
+    await supabase.from("participants").update({ patient_code: code.trim() }).eq("id", id);
+    setParticipants((prev) => prev.map((p) => (p.id === id ? { ...p, patient_code: code.trim() } : p)));
+    setAssigningId(null);
+    setAssignCode("");
+  }
 
   async function viewAnswers(sessionId: string) {
     setSelectedId(sessionId);
@@ -127,143 +164,254 @@ export default function AdminPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">관리자 대시보드</h1>
-        <span className="text-sm text-gray-500">{sessions.length}개 응답</span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-1">
-          <p className="text-2xl font-bold text-primary-600">{sessions.length}</p>
-          <p className="text-sm text-gray-500">총 설문 세션</p>
-        </div>
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-1">
-          <p className="text-2xl font-bold text-green-600">
-            {sessions.filter((s) => s.is_complete).length}
-          </p>
-          <p className="text-sm text-gray-500">완료된 설문</p>
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+        {(["surveys", "participants"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              tab === t ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            {t === "surveys" ? `설문 응답 (${sessions.length})` : "참여신청"}
+          </button>
+        ))}
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="font-semibold text-gray-800">응답 목록</h2>
-        </div>
-        {loading ? (
-          <div className="p-8 text-center text-gray-400">로딩 중...</div>
-        ) : sessions.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">아직 응답이 없습니다.</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">환자 코드</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">설문 유형</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">나이/성별</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">시작일</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">상태</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">액션</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {sessions.map((s) => (
-                  <tr
-                    key={s.id}
-                    className={`hover:bg-gray-50 transition-colors ${
-                      selectedId === s.id ? "bg-primary-50" : ""
-                    }`}
-                  >
-                    <td className="px-4 py-3 font-mono text-xs">{s.patient_code ?? "—"}</td>
-                    <td className="px-4 py-3">
-                      <SurveyTypeBadge type={s.survey_type} />
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {s.age ? `${s.age}세` : "—"}{" "}
-                      {s.gender ? `/ ${GENDER_LABEL[s.gender] ?? s.gender}` : ""}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                      {formatDate(s.started_at)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                          s.is_complete
-                            ? "bg-green-100 text-green-700"
-                            : "bg-amber-100 text-amber-700"
+      {/* === 설문 응답 탭 === */}
+      {tab === "surveys" && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-1">
+              <p className="text-2xl font-bold text-primary-600">{sessions.length}</p>
+              <p className="text-sm text-gray-500">총 설문 세션</p>
+            </div>
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-1">
+              <p className="text-2xl font-bold text-green-600">
+                {sessions.filter((s) => s.is_complete).length}
+              </p>
+              <p className="text-sm text-gray-500">완료된 설문</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="font-semibold text-gray-800">응답 목록</h2>
+            </div>
+            {loading ? (
+              <div className="p-8 text-center text-gray-400">로딩 중...</div>
+            ) : sessions.length === 0 ? (
+              <div className="p-8 text-center text-gray-400">아직 응답이 없습니다.</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">환자 코드</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">설문 유형</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">나이/성별</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">시작일</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">상태</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">액션</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {sessions.map((s) => (
+                      <tr
+                        key={s.id}
+                        className={`hover:bg-gray-50 transition-colors ${
+                          selectedId === s.id ? "bg-primary-50" : ""
                         }`}
                       >
-                        {s.is_complete ? "완료" : "진행 중"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => viewAnswers(s.id)}
-                        className="text-xs text-primary-600 hover:underline font-medium"
-                      >
-                        응답 보기
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                        <td className="px-4 py-3 font-mono text-xs">{s.patient_code ?? "—"}</td>
+                        <td className="px-4 py-3">
+                          <SurveyTypeBadge type={s.survey_type} />
+                        </td>
+                        <td className="px-4 py-3 text-gray-600">
+                          {s.age ? `${s.age}세` : "—"}{" "}
+                          {s.gender ? `/ ${GENDER_LABEL[s.gender] ?? s.gender}` : ""}
+                        </td>
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                          {formatDate(s.started_at)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
+                              s.is_complete
+                                ? "bg-green-100 text-green-700"
+                                : "bg-amber-100 text-amber-700"
+                            }`}
+                          >
+                            {s.is_complete ? "완료" : "진행 중"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => viewAnswers(s.id)}
+                            className="text-xs text-primary-600 hover:underline font-medium"
+                          >
+                            응답 보기
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      {/* Answer detail panel */}
-      {selectedId && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold text-gray-800">응답 상세</h2>
-              {selectedSession && (
-                <p className="text-xs text-gray-400 mt-0.5">
-                  환자: {selectedSession.patient_code ?? "익명"} ·{" "}
-                  {selectedSession.completed_at
-                    ? `완료: ${formatDate(selectedSession.completed_at)}`
-                    : "미완료"}
-                </p>
+          {/* Answer detail panel */}
+          {selectedId && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold text-gray-800">응답 상세</h2>
+                  {selectedSession && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      환자: {selectedSession.patient_code ?? "익명"} ·{" "}
+                      {selectedSession.completed_at
+                        ? `완료: ${formatDate(selectedSession.completed_at)}`
+                        : "미완료"}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={exportCSV}
+                  className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  CSV 내보내기
+                </button>
+              </div>
+
+              {answerLoading ? (
+                <div className="p-8 text-center text-gray-400">로딩 중...</div>
+              ) : selectedAnswers.length === 0 ? (
+                <div className="p-8 text-center text-gray-400">응답 데이터가 없습니다.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">증상 (한국어)</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">영문</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">소문항</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">유형</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">응답</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {selectedAnswers.map((a, idx) => {
+                        const item = SURVEY_ITEMS.find((i) => i.id === a.item_id);
+                        return (
+                          <tr key={idx} className="hover:bg-gray-50">
+                            <td className="px-4 py-2.5 text-gray-400">{a.item_id}</td>
+                            <td className="px-4 py-2.5 text-gray-800">{item?.termKo ?? "—"}</td>
+                            <td className="px-4 py-2.5 text-gray-500 text-xs">{item?.termEn ?? "—"}</td>
+                            <td className="px-4 py-2.5 font-mono text-gray-500">{a.question_key}</td>
+                            <td className="px-4 py-2.5 text-gray-500 text-xs">{a.question_type}</td>
+                            <td className="px-4 py-2.5 font-medium text-gray-900">{getAnswerLabel(a)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
-            <button
-              onClick={exportCSV}
-              className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-            >
-              CSV 내보내기
-            </button>
-          </div>
+          )}
+        </>
+      )}
 
-          {answerLoading ? (
+      {/* === 참여신청 탭 === */}
+      {tab === "participants" && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-800">참여신청 목록</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              신청자에게 참여자번호를 배정하면 설문을 시작할 수 있습니다.
+            </p>
+          </div>
+          {participantsLoading ? (
             <div className="p-8 text-center text-gray-400">로딩 중...</div>
-          ) : selectedAnswers.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">응답 데이터가 없습니다.</div>
+          ) : participants.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">아직 신청이 없습니다.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">증상 (한국어)</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">영문</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">소문항</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">유형</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">응답</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">이름</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">병록번호/생년월일</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연락처</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">신청일</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">참여자번호</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {selectedAnswers.map((a, idx) => {
-                    const item = SURVEY_ITEMS.find((i) => i.id === a.item_id);
-                    return (
-                      <tr key={idx} className="hover:bg-gray-50">
-                        <td className="px-4 py-2.5 text-gray-400">{a.item_id}</td>
-                        <td className="px-4 py-2.5 text-gray-800">{item?.termKo ?? "—"}</td>
-                        <td className="px-4 py-2.5 text-gray-500 text-xs">{item?.termEn ?? "—"}</td>
-                        <td className="px-4 py-2.5 font-mono text-gray-500">{a.question_key}</td>
-                        <td className="px-4 py-2.5 text-gray-500 text-xs">{a.question_type}</td>
-                        <td className="px-4 py-2.5 font-medium text-gray-900">{getAnswerLabel(a)}</td>
-                      </tr>
-                    );
-                  })}
+                  {participants.map((p) => (
+                    <tr key={p.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
+                      <td className="px-4 py-3 font-mono text-gray-600 text-xs">{p.record_or_birth}</td>
+                      <td className="px-4 py-3 text-gray-600">{p.contact}</td>
+                      <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
+                        {formatDate(p.applied_at)}
+                      </td>
+                      <td className="px-4 py-3">
+                        {assigningId === p.id ? (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              autoFocus
+                              type="text"
+                              value={assignCode}
+                              onChange={(e) => setAssignCode(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") assignPatientCode(p.id, assignCode);
+                                if (e.key === "Escape") { setAssigningId(null); setAssignCode(""); }
+                              }}
+                              className="w-24 px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-400"
+                              placeholder="번호 입력"
+                            />
+                            <button
+                              onClick={() => assignPatientCode(p.id, assignCode)}
+                              className="text-xs px-2 py-1 bg-primary-600 text-white rounded hover:bg-primary-700"
+                            >
+                              저장
+                            </button>
+                            <button
+                              onClick={() => { setAssigningId(null); setAssignCode(""); }}
+                              className="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"
+                            >
+                              취소
+                            </button>
+                          </div>
+                        ) : p.patient_code ? (
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                              {p.patient_code}
+                            </span>
+                            <button
+                              onClick={() => { setAssigningId(p.id); setAssignCode(p.patient_code ?? ""); }}
+                              className="text-xs text-gray-400 hover:text-gray-600"
+                            >
+                              수정
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setAssigningId(p.id); setAssignCode(""); }}
+                            className="text-xs text-primary-600 hover:underline font-medium"
+                          >
+                            번호 배정
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
