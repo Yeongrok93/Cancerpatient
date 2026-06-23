@@ -61,6 +61,7 @@ type Participant = {
   name: string;
   record_or_birth: string;
   contact: string;
+  research_types: string | null;
   consent_agreed: boolean;
   applied_at: string;
   patient_code: string | null;
@@ -346,8 +347,9 @@ export default function AdminPage() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">이름</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">병록번호/생년월일</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">생년월일</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연락처</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연구종류</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">신청일</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">참여자번호</th>
                   </tr>
@@ -358,6 +360,13 @@ export default function AdminPage() {
                       <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
                       <td className="px-4 py-3 font-mono text-gray-600 text-xs">{p.record_or_birth}</td>
                       <td className="px-4 py-3 text-gray-600">{p.contact}</td>
+                      <td className="px-4 py-3 text-gray-600 text-xs">
+                        {p.research_types
+                          ? p.research_types.split(",").map((t) => (
+                              <span key={t} className="inline-flex mr-1 px-1.5 py-0.5 bg-gray-100 rounded text-gray-600">{t}</span>
+                            ))
+                          : "—"}
+                      </td>
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
                         {formatDate(p.applied_at)}
                       </td>

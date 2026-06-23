@@ -12,16 +12,25 @@ export default function RegisterPage() {
   const [name, setName]               = useState("");
   const [recordOrBirth, setRecordOrBirth] = useState("");
   const [contact, setContact]         = useState("");
+  const [researchTypes, setResearchTypes] = useState<string[]>([]);
   const [consent, setConsent]         = useState(false);
 
-  const [errors, setErrors] = useState<Partial<Record<"name" | "recordOrBirth" | "contact" | "consent", string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<"name" | "recordOrBirth" | "contact" | "researchTypes" | "consent", string>>>({});
+
+  function toggleResearchType(type: string) {
+    setResearchTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+    setErrors((p) => ({ ...p, researchTypes: undefined }));
+  }
 
   function validate() {
     const e: typeof errors = {};
-    if (!name.trim())           e.name           = "이름을 입력해 주세요.";
-    if (!recordOrBirth.trim())  e.recordOrBirth  = "생년월일을 입력해 주세요.";
-    if (!contact.trim())        e.contact        = "연락처를 입력해 주세요.";
-    if (!consent)               e.consent        = "개인정보 제공에 동의해 주세요.";
+    if (!name.trim())             e.name          = "이름을 입력해 주세요.";
+    if (!recordOrBirth.trim())    e.recordOrBirth = "생년월일을 입력해 주세요.";
+    if (!contact.trim())          e.contact       = "연락처를 입력해 주세요.";
+    if (researchTypes.length === 0) e.researchTypes = "연구 종류를 하나 이상 선택해 주세요.";
+    if (!consent)                 e.consent       = "개인정보 제공에 동의해 주세요.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -37,6 +46,7 @@ export default function RegisterPage() {
           name: name.trim(),
           record_or_birth: recordOrBirth.trim(),
           contact: contact.trim(),
+          research_types: researchTypes.join(","),
           consent_agreed: true,
         });
       if (error) throw error;
@@ -109,6 +119,42 @@ export default function RegisterPage() {
             className={inputCls(!!errors.recordOrBirth)}
           />
         </Field>
+
+        {/* 연구종류 */}
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-gray-700">연구종류 <span className="text-xs font-normal text-gray-400">(복수선택 가능)</span></p>
+          <div className={`flex gap-2 rounded-xl border-2 p-3 transition-colors ${
+            errors.researchTypes ? "border-red-300 bg-red-50" : "border-gray-200"
+          }`}>
+            {["설문조사", "면담"].map((type) => {
+              const checked = researchTypes.includes(type);
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => toggleResearchType(type)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-all ${
+                    checked
+                      ? "bg-primary-600 border-primary-600 text-white font-semibold"
+                      : "bg-white border-gray-200 text-gray-600 hover:border-primary-300"
+                  }`}
+                >
+                  <span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                    checked ? "bg-white border-white" : "border-gray-400"
+                  }`}>
+                    {checked && (
+                      <svg className="w-3 h-3 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </span>
+                  {type}
+                </button>
+              );
+            })}
+          </div>
+          {errors.researchTypes && <p className="text-xs text-red-500 pl-1">{errors.researchTypes}</p>}
+        </div>
 
         {/* 연락처 */}
         <Field label="연락처" error={errors.contact} hint="예) 010-1234-5678">

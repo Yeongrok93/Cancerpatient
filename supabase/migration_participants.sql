@@ -4,8 +4,9 @@
 CREATE TABLE IF NOT EXISTS participants (
   id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name            TEXT NOT NULL,
-  record_or_birth TEXT NOT NULL,   -- 병록번호 또는 생년월일
+  record_or_birth TEXT NOT NULL,   -- 생년월일
   contact         TEXT NOT NULL,
+  research_types  TEXT,            -- 설문조사, 면담 (comma-separated)
   consent_agreed  BOOLEAN NOT NULL DEFAULT false,
   applied_at      TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   patient_code    TEXT             -- assigned later by researcher
