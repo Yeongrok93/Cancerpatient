@@ -17,6 +17,14 @@ CREATE INDEX IF NOT EXISTS idx_participants_code    ON participants (patient_cod
 
 ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "anon insert participants" ON participants FOR INSERT TO anon WITH CHECK (true);
-CREATE POLICY "anon select participants" ON participants FOR SELECT TO anon USING (true);
-CREATE POLICY "service participants"     ON participants FOR ALL    TO service_role USING (true) WITH CHECK (true);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='participants' AND policyname='anon insert participants') THEN
+    CREATE POLICY "anon insert participants" ON participants FOR INSERT TO anon WITH CHECK (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='participants' AND policyname='anon select participants') THEN
+    CREATE POLICY "anon select participants" ON participants FOR SELECT TO anon USING (true);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename='participants' AND policyname='service participants') THEN
+    CREATE POLICY "service participants" ON participants FOR ALL TO service_role USING (true) WITH CHECK (true);
+  END IF;
+END $$;
