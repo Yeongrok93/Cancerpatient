@@ -19,7 +19,7 @@ export default function RegisterPage() {
   function validate() {
     const e: typeof errors = {};
     if (!name.trim())           e.name           = "이름을 입력해 주세요.";
-    if (!recordOrBirth.trim())  e.recordOrBirth  = "병록번호 또는 생년월일을 입력해 주세요.";
+    if (!recordOrBirth.trim())  e.recordOrBirth  = "생년월일을 입력해 주세요.";
     if (!contact.trim())        e.contact        = "연락처를 입력해 주세요.";
     if (!consent)               e.consent        = "개인정보 제공에 동의해 주세요.";
     setErrors(e);
@@ -98,12 +98,12 @@ export default function RegisterPage() {
           />
         </Field>
 
-        {/* 병록번호 / 생년월일 */}
-        <Field label="병록번호 또는 생년월일" error={errors.recordOrBirth} hint="예) 12345678  또는  19801231">
+        {/* 생년월일 */}
+        <Field label="생년월일" error={errors.recordOrBirth} hint="예) 19801231">
           <input
             type="text"
             required
-            placeholder="병록번호 또는 생년월일 8자리"
+            placeholder="생년월일 8자리 (예: 19801231)"
             value={recordOrBirth}
             onChange={(e) => { setRecordOrBirth(e.target.value); setErrors((p) => ({ ...p, recordOrBirth: undefined })); }}
             className={inputCls(!!errors.recordOrBirth)}
@@ -134,7 +134,7 @@ export default function RegisterPage() {
               className="mt-0.5 w-4 h-4 accent-primary-600 flex-shrink-0"
             />
             <span className="text-xs text-gray-600 leading-relaxed">
-              본인은 연구 목적으로 제공한 개인정보(이름, 병록번호/생년월일, 연락처)가 수집·이용됨에 동의합니다. 수집된 정보는 연구 외 목적으로 사용되지 않습니다.
+              본인은 연구 목적으로 제공한 개인정보(이름, 생년월일, 연락처)가 수집·이용됨에 동의합니다. 수집된 정보는 연구 외 목적으로 사용되지 않습니다.
             </span>
           </label>
           {errors.consent && <p className="text-xs text-red-500 pl-1">{errors.consent}</p>}
@@ -148,12 +148,6 @@ export default function RegisterPage() {
           {submitting ? "신청 중..." : "참여신청 제출"}
         </button>
 
-        <p className="text-center text-xs text-gray-400">
-          이미 번호를 받으셨나요?{" "}
-          <a href="/" className="text-primary-600 hover:underline font-medium">
-            설문 시작하기
-          </a>
-        </p>
       </form>
     </div>
   );
