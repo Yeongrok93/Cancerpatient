@@ -19,7 +19,6 @@ export default function StartPage() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
         <div className="space-y-1">
           <p className="text-xs font-semibold text-primary-600 uppercase tracking-wide">외래기반 항체-약물 접합체(ADC) 치료를 받는 암 환자의 증상 부담 연구</p>
-          <h1 className="text-lg font-bold text-gray-900">안녕하세요, 환자분</h1>
         </div>
 
         <p className="text-sm text-gray-700 leading-relaxed">
