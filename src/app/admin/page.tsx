@@ -15,6 +15,7 @@ type Session = {
   started_at: string;
   completed_at: string | null;
   is_complete: boolean;
+  additional_comments: string | null;
 };
 
 type Answer = {
@@ -152,6 +153,11 @@ export default function AdminPage() {
         getAnswerLabel(a),
       ].join(",");
     });
+    if (selectedSession.additional_comments) {
+      rows.push(
+        `${selectedSession.patient_code ?? ""},,주관식 추가 의견,,,"${selectedSession.additional_comments.replace(/"/g, '""')}"`
+      );
+    }
     const csv = ["환자코드,문항번호,증상(한국어),소문항,유형,응답", ...rows].join("\n");
     const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -321,6 +327,15 @@ export default function AdminPage() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+
+              {selectedSession?.additional_comments && (
+                <div className="px-5 py-4 border-t border-gray-100 space-y-1.5">
+                  <p className="text-xs font-medium text-gray-500 uppercase">주관식 추가 의견</p>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap bg-gray-50 rounded-lg p-3">
+                    {selectedSession.additional_comments}
+                  </p>
                 </div>
               )}
             </div>

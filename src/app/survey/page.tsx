@@ -38,6 +38,7 @@ function SurveyContent() {
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorItemIds, setErrorItemIds] = useState<Set<number>>(new Set());
+  const [additionalComment, setAdditionalComment] = useState("");
   const firstErrorRef = useRef<HTMLDivElement>(null);
 
   const totalQuestions = getTotalQuestionCount();
@@ -176,7 +177,11 @@ function SurveyContent() {
       await saveCurrentCategory();
       await supabase
         .from("survey_sessions")
-        .update({ is_complete: true, completed_at: new Date().toISOString() })
+        .update({
+          is_complete: true,
+          completed_at: new Date().toISOString(),
+          additional_comments: additionalComment.trim() || null,
+        })
         .eq("id", sessionId);
       router.push(`/survey/complete?session=${sessionId}`);
     } catch (err) {
@@ -308,6 +313,25 @@ function SurveyContent() {
           );
         })}
       </div>
+
+      {/* 추가 의견 (선택) */}
+      {isLast && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-800">
+              지난 일주일 동안 위에 답변하신 증상(부작용) 외에, 일상생활이나 재택 자가 관리 과정에서 의료진에게 추가로 알리고 싶거나 환자분이 느끼신 구체적인 어려움(신체적 고통, 정서적 스트레스, 생활의 제약 등)이 있다면 자유롭게 적어주십시오.
+            </p>
+            <p className="text-xs text-gray-400 mt-1">선택 사항입니다. 해당 사항이 없으면 비워두셔도 됩니다.</p>
+          </div>
+          <textarea
+            value={additionalComment}
+            onChange={(e) => setAdditionalComment(e.target.value)}
+            rows={5}
+            placeholder="자유롭게 적어주세요 (선택 사항)"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 resize-y"
+          />
+        </div>
+      )}
 
       {/* Nav */}
       <div className="flex gap-3">
