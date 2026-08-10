@@ -3,7 +3,16 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { DEMOGRAPHICS, IPAQ_ITEMS, SITTING_KEYS, SITTING_LABEL } from "@/lib/w0";
+import {
+  DEMOGRAPHICS,
+  ECOG_KEY,
+  ECOG_LABEL,
+  ECOG_OPTIONS,
+  IPAQ_ITEMS,
+  SITTING_KEYS,
+  SITTING_LABEL,
+  EMERGENCY_SCREENING,
+} from "@/lib/w0";
 
 type AnswerMap = Record<string, number | string>;
 
@@ -33,6 +42,8 @@ function W0Content() {
     const keys: string[] = [];
     // Demographics — all required
     DEMOGRAPHICS.forEach((q) => keys.push(q.key));
+    // ECOG — required
+    keys.push(ECOG_KEY);
     // IPAQ — days always required; duration required only if days > 0
     IPAQ_ITEMS.forEach((item) => {
       keys.push(item.daysKey);
@@ -43,6 +54,8 @@ function W0Content() {
     });
     // Sitting always required
     keys.push(SITTING_KEYS.hours, SITTING_KEYS.minutes);
+    // Emergency screening — all required
+    EMERGENCY_SCREENING.forEach((q) => keys.push(q.key));
     return keys;
   }
 
@@ -105,6 +118,12 @@ function W0Content() {
 
   const required = getRequiredKeys();
   const unansweredCount = required.filter((k) => isUnanswered(answers[k])).length;
+
+  // Question numbering: I. Demographics -> II. ECOG -> III. IPAQ -> IV. Emergency screening
+  const ecogNumber = DEMOGRAPHICS.length + 1;
+  const ipaqBaseNumber = ecogNumber;
+  const sittingNumber = ipaqBaseNumber + IPAQ_ITEMS.length * 2 + 1;
+  const emergencyBaseNumber = sittingNumber + 1;
 
   return (
     <div className="space-y-6">
@@ -184,9 +203,50 @@ function W0Content() {
           ))}
         </div>
 
-        {/* Part II — IPAQ */}
+        {/* Part II — Patient-Reported ECOG */}
+        <div
+          id={`field-${ECOG_KEY}`}
+          className={`bg-white rounded-2xl shadow-sm border-2 p-5 space-y-4 transition-colors ${
+            errorKeys.has(ECOG_KEY) ? "border-red-400 bg-red-50" : "border-gray-100"
+          }`}
+        >
+          <div className="flex items-center justify-between border-b pb-2">
+            <h3 className="text-sm font-semibold text-gray-700">Part II. 환자 보고형 ECOG</h3>
+            {errorKeys.has(ECOG_KEY) && <span className="text-xs text-red-500 font-medium">응답 필요</span>}
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 bg-emerald-100 text-emerald-700 mt-0.5">
+              {ecogNumber}
+            </span>
+            <p className="text-sm text-gray-700">{ECOG_LABEL}</p>
+          </div>
+          <div className="pl-8 space-y-2">
+            {ECOG_OPTIONS.map((opt) => {
+              const selected = answers[ECOG_KEY] === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setAnswer(ECOG_KEY, opt.value)}
+                  className={`w-full text-left px-3 py-2.5 rounded-xl border-2 transition-all ${
+                    selected
+                      ? "bg-emerald-600 border-emerald-600 text-white"
+                      : "bg-white border-gray-200 text-gray-700 hover:border-emerald-300"
+                  }`}
+                >
+                  <p className="text-sm font-semibold">{opt.label}</p>
+                  <p className={`text-xs mt-0.5 ${selected ? "text-emerald-50" : "text-gray-500"}`}>
+                    {opt.description}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Part III — IPAQ */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-6">
-          <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">Part II. 신체활동 (IPAQ)</h3>
+          <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">Part III. 신체활동 (IPAQ)</h3>
           <p className="text-xs text-gray-500">
             지난 7일 동안의 신체활동을 평가합니다. 적어도 10분 이상 지속한 활동만 포함하세요.
           </p>
@@ -198,7 +258,7 @@ function W0Content() {
               <div key={item.id} className="space-y-4 border-t pt-4 first:border-t-0 first:pt-0">
                 <div className="flex items-start gap-2">
                   <span className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 bg-emerald-100 text-emerald-700 mt-0.5">
-                    {DEMOGRAPHICS.length + itemIdx * 2 + 1}
+                    {ipaqBaseNumber + itemIdx * 2 + 1}
                   </span>
                   <div>
                     <p className="text-sm font-semibold text-gray-800">{item.activityLabel}</p>
@@ -274,7 +334,7 @@ function W0Content() {
             >
               <div className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 bg-emerald-100 text-emerald-700">
-                  {DEMOGRAPHICS.length + IPAQ_ITEMS.length * 2 + 1}
+                  {sittingNumber}
                 </span>
                 <p className="text-sm text-gray-700">{SITTING_LABEL}</p>
               </div>
@@ -291,6 +351,56 @@ function W0Content() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Part IV — Emergency screening */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-6">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">Part IV. 응급 선별문항</h3>
+            <p className="text-xs text-gray-500 pt-2">
+              최근 상태 중 응급 처치가 필요할 수 있는 증상이 있는지 확인합니다.
+            </p>
+          </div>
+
+          {EMERGENCY_SCREENING.map((q, qIdx) => (
+            <div
+              key={q.key}
+              id={`field-${q.key}`}
+              className={`space-y-2 rounded-xl border-2 p-3 transition-colors ${
+                errorKeys.has(q.key) ? "border-red-400 bg-red-50" : "border-transparent"
+              }`}
+            >
+              <div className="flex items-start gap-2">
+                <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                  errorKeys.has(q.key) ? "bg-red-100 text-red-600" : "bg-emerald-100 text-emerald-700"
+                }`}>{emergencyBaseNumber + qIdx}</span>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500">{q.title}</p>
+                  <p className="text-sm font-medium text-gray-800">{q.question}</p>
+                </div>
+                {errorKeys.has(q.key) && <span className="ml-auto text-xs text-red-500 font-medium flex-shrink-0">응답 필요</span>}
+              </div>
+              <div className="flex flex-wrap gap-2 pl-8">
+                {q.options.map((opt) => {
+                  const selected = answers[q.key] === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setAnswer(q.key, opt.value)}
+                      className={`px-3 py-1.5 rounded-lg border text-sm transition-all ${
+                        selected
+                          ? "bg-emerald-600 border-emerald-600 text-white font-semibold"
+                          : "bg-white border-gray-200 text-gray-600 hover:border-emerald-300"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
 
         <button
