@@ -70,8 +70,8 @@ export default function RegisterPage() {
           <div className="space-y-2">
             <h1 className="text-lg font-bold text-gray-900">신청이 완료되었습니다</h1>
             <p className="text-sm text-gray-500 leading-relaxed">
-              연구팀에서 검토 후 <strong>연구참여자번호</strong>를 개별적으로 안내해 드릴 예정입니다.<br />
-              번호를 받으신 후 첫 화면에서 설문을 시작해 주세요.
+              연구팀에서 신청 내용을 확인한 후 참여를 확정해 드립니다.<br />
+              확정 안내를 받으신 후 첫 화면에서 이름과 생년월일로 설문을 시작해 주세요.
             </p>
           </div>
           <a

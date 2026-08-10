@@ -11,36 +11,34 @@ function normalize(value: string) {
 export default function StartPage() {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [patientCode, setPatientCode] = useState("");
   const [birth, setBirth] = useState("");
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
 
   async function handleStart(e: React.FormEvent) {
     e.preventDefault();
-    const code = patientCode.trim();
-    if (!name.trim() || !code || !birth.trim()) return;
+    if (!name.trim() || !birth.trim()) return;
 
     setChecking(true);
     setError("");
     try {
       const { data, error: queryError } = await supabase
         .from("participants")
-        .select("name, record_or_birth")
-        .eq("patient_code", code)
-        .maybeSingle();
+        .select("patient_code, record_or_birth")
+        .eq("name", name.trim());
       if (queryError) throw queryError;
 
-      const nameMatches = !!data && data.name.trim() === name.trim();
-      const birthMatches = !!data && normalize(data.record_or_birth) === normalize(birth);
+      const match = (data ?? []).find(
+        (p) => normalize(p.record_or_birth) === normalize(birth)
+      );
 
-      if (!data || !nameMatches || !birthMatches) {
-        setError("입력하신 정보와 일치하는 참여자를 찾을 수 없습니다. 이름·연구참여자번호·생년월일을 다시 확인해 주세요.");
+      if (!match || !match.patient_code) {
+        setError("입력하신 정보와 일치하는 참여자를 찾을 수 없습니다. 이름·생년월일을 다시 확인해 주세요.");
         setChecking(false);
         return;
       }
 
-      router.push(`/select?code=${encodeURIComponent(code)}`);
+      router.push(`/select?code=${encodeURIComponent(match.patient_code)}`);
     } catch (err) {
       console.error(err);
       setError("확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
@@ -109,7 +107,7 @@ export default function StartPage() {
       >
         <div className="space-y-1">
           <h2 className="text-base font-bold text-gray-900">본인확인</h2>
-          <p className="text-xs text-gray-500">타인의 설문 접근을 막기 위해 세 가지 정보를 모두 확인합니다.</p>
+          <p className="text-xs text-gray-500">타인의 설문 접근을 막기 위해 두 가지 정보를 모두 확인합니다.</p>
         </div>
 
         <div className="space-y-2">
@@ -124,21 +122,6 @@ export default function StartPage() {
             placeholder="홍길동"
             value={name}
             onChange={(e) => { setName(e.target.value); setError(""); }}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700" htmlFor="patient_code">
-            연구참여자번호
-          </label>
-          <input
-            id="patient_code"
-            type="text"
-            required
-            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            placeholder="참여자번호를 입력하세요"
-            value={patientCode}
-            onChange={(e) => { setPatientCode(e.target.value); setError(""); }}
           />
         </div>
 
@@ -163,7 +146,7 @@ export default function StartPage() {
 
         <button
           type="submit"
-          disabled={!name.trim() || !patientCode.trim() || !birth.trim() || checking}
+          disabled={!name.trim() || !birth.trim() || checking}
           className="w-full py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold rounded-xl transition-colors duration-150"
         >
           {checking ? "확인 중..." : "설문 시작하기 →"}
