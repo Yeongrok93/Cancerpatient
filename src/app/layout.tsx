@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import "./globals.css";
+import ContactFab from "@/components/ContactFab";
 
 export const metadata: Metadata = {
   title: "암증상설문조사",
@@ -46,6 +48,9 @@ export default function RootLayout({
             개발한 도구의 한국어 번역판입니다.
           </div>
         </footer>
+        <Suspense fallback={null}>
+          <ContactFab />
+        </Suspense>
       </body>
     </html>
   );

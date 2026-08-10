@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { SURVEY_ITEMS, RESPONSE_OPTIONS } from "@/lib/questions";
 
@@ -68,8 +69,16 @@ type Participant = {
   patient_code: string | null;
 };
 
+type PatientMessage = {
+  id: string;
+  patient_code: string;
+  message: string;
+  created_at: string;
+  is_read: boolean;
+};
+
 export default function AdminPage() {
-  const [tab, setTab] = useState<"surveys" | "participants">("surveys");
+  const [tab, setTab] = useState<"surveys" | "participants" | "messages">("surveys");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -79,6 +88,9 @@ export default function AdminPage() {
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignCode, setAssignCode] = useState("");
+  const [messages, setMessages] = useState<PatientMessage[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -93,6 +105,15 @@ export default function AdminPage() {
     load();
   }, []);
 
+  const patientDashboards = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of sessions) {
+      if (s.survey_type !== "pro_ctcae" || !s.is_complete || !s.patient_code) continue;
+      counts.set(s.patient_code, (counts.get(s.patient_code) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  }, [sessions]);
+
   useEffect(() => {
     if (tab !== "participants") return;
     setParticipantsLoading(true);
@@ -106,6 +127,34 @@ export default function AdminPage() {
         setParticipantsLoading(false);
       });
   }, [tab]);
+
+  useEffect(() => {
+    supabase
+      .from("patient_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("is_read", false)
+      .then(({ count }) => setUnreadCount(count ?? 0));
+  }, []);
+
+  useEffect(() => {
+    if (tab !== "messages") return;
+    setMessagesLoading(true);
+    supabase
+      .from("patient_messages")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200)
+      .then(({ data }) => {
+        setMessages(data ?? []);
+        setMessagesLoading(false);
+      });
+  }, [tab]);
+
+  async function toggleMessageRead(id: string, isRead: boolean) {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, is_read: isRead } : m)));
+    setUnreadCount((prev) => Math.max(0, prev + (isRead ? -1 : 1)));
+    await supabase.from("patient_messages").update({ is_read: isRead }).eq("id", id);
+  }
 
   async function assignPatientCode(id: string, code: string) {
     if (!code.trim()) return;
@@ -175,15 +224,20 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        {(["surveys", "participants"] as const).map((t) => (
+        {(["surveys", "participants", "messages"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
               tab === t ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            {t === "surveys" ? `설문 응답 (${sessions.length})` : "참여신청"}
+            {t === "surveys" ? `설문 응답 (${sessions.length})` : t === "participants" ? "참여신청" : "환자 문의"}
+            {t === "messages" && unreadCount > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">
+                {unreadCount}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -203,6 +257,24 @@ export default function AdminPage() {
               <p className="text-sm text-gray-500">완료된 설문</p>
             </div>
           </div>
+
+          {patientDashboards.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+              <h2 className="font-semibold text-gray-800 mb-3">환자별 증상 대시보드</h2>
+              <div className="flex flex-wrap gap-2">
+                {patientDashboards.map(([code, count]) => (
+                  <Link
+                    key={code}
+                    href={`/admin/patients/${encodeURIComponent(code)}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-primary-400 hover:bg-primary-50 text-sm font-mono text-gray-700 transition-colors"
+                  >
+                    {code}
+                    <span className="text-xs text-gray-400 font-sans">{count}주</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
@@ -438,6 +510,50 @@ export default function AdminPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* === 환자 문의 탭 === */}
+      {tab === "messages" && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-800">환자 문의 수신함</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              환자가 설문 화면의 문의 버튼으로 보낸 메시지입니다.
+            </p>
+          </div>
+          {messagesLoading ? (
+            <div className="p-8 text-center text-gray-400">로딩 중...</div>
+          ) : messages.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">아직 문의가 없습니다.</div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {messages.map((m) => (
+                <div key={m.id} className={`px-5 py-4 flex items-start gap-4 ${m.is_read ? "" : "bg-primary-50/40"}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                        {m.patient_code}
+                      </span>
+                      <span className="text-xs text-gray-400">{formatDate(m.created_at)}</span>
+                      {!m.is_read && (
+                        <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full font-medium">
+                          미확인
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-800 mt-1.5 whitespace-pre-wrap">{m.message}</p>
+                  </div>
+                  <button
+                    onClick={() => toggleMessageRead(m.id, !m.is_read)}
+                    className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium whitespace-nowrap"
+                  >
+                    {m.is_read ? "미확인으로 표시" : "확인 완료로 표시"}
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>
