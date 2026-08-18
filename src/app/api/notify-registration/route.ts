@@ -17,27 +17,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "name is required" }, { status: 400 });
   }
 
-  const appliedAt = new Date().toLocaleString("ko-KR", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
+  // SMS (not LMS) tops out around 45 Korean characters / 90 bytes, so this
+  // drops 신청일시 (the text's own arrival time already conveys "now") and
+  // packs the rest into one slash-separated line instead of labeled lines.
   const text = [
-    "[연구참여신청]",
-    "",
-    `신청일시: ${appliedAt}`,
-    `이름: ${name}`,
-    `생년월일: ${recordOrBirth || "-"}`,
-    `연구종류: ${researchTypes?.length ? researchTypes.join(", ") : "-"}`,
-    `연락처: ${contact || "-"}`,
-  ].join("\n");
+    name,
+    recordOrBirth || "-",
+    researchTypes?.length ? researchTypes.join(",") : "-",
+    contact || "-",
+  ].join("/");
+  const smsText = `[연구참여신청] ${text}`;
 
   try {
-    await sendSms({ to: NOTIFY_PHONES, from: SENDER_PHONE, text });
+    await sendSms({ to: NOTIFY_PHONES, from: SENDER_PHONE, text: smsText });
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("Failed to send registration SMS:", err);
