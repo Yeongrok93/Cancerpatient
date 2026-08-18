@@ -50,6 +50,18 @@ export default function RegisterPage() {
           consent_agreed: true,
         });
       if (error) throw error;
+
+      fetch("/api/notify-registration", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          recordOrBirth: recordOrBirth.trim(),
+          researchTypes,
+          contact: contact.trim(),
+        }),
+      }).catch((notifyErr) => console.error("Failed to notify registration:", notifyErr));
+
       setStep("done");
     } catch (err) {
       console.error(err);

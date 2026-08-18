@@ -4,10 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
-function normalize(value: string) {
-  return value.trim().replace(/\D/g, "");
-}
-
 export default function StartPage() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -22,23 +18,19 @@ export default function StartPage() {
     setChecking(true);
     setError("");
     try {
-      const { data, error: queryError } = await supabase
-        .from("participants")
-        .select("patient_code, record_or_birth")
-        .eq("name", name.trim());
+      const { data: patientCode, error: queryError } = await supabase.rpc("find_patient_code", {
+        p_name: name.trim(),
+        p_birth: birth,
+      });
       if (queryError) throw queryError;
 
-      const match = (data ?? []).find(
-        (p) => normalize(p.record_or_birth) === normalize(birth)
-      );
-
-      if (!match || !match.patient_code) {
+      if (!patientCode) {
         setError("입력하신 정보와 일치하는 참여자를 찾을 수 없습니다. 이름·생년월일을 다시 확인해 주세요.");
         setChecking(false);
         return;
       }
 
-      router.push(`/select?code=${encodeURIComponent(match.patient_code)}`);
+      router.push(`/select?code=${encodeURIComponent(patientCode)}`);
     } catch (err) {
       console.error(err);
       setError("확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");

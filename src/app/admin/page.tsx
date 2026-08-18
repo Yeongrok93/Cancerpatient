@@ -117,13 +117,14 @@ export default function AdminPage() {
   useEffect(() => {
     if (tab !== "participants") return;
     setParticipantsLoading(true);
-    supabase
-      .from("participants")
-      .select("*")
-      .order("applied_at", { ascending: false })
-      .limit(200)
+    fetch("/api/admin/participants")
+      .then((res) => res.json())
       .then(({ data }) => {
         setParticipants(data ?? []);
+        setParticipantsLoading(false);
+      })
+      .catch((err) => {
+        console.error(err);
         setParticipantsLoading(false);
       });
   }, [tab]);
@@ -158,7 +159,15 @@ export default function AdminPage() {
 
   async function assignPatientCode(id: string, code: string) {
     if (!code.trim()) return;
-    await supabase.from("participants").update({ patient_code: code.trim() }).eq("id", id);
+    const res = await fetch("/api/admin/participants", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, patient_code: code.trim() }),
+    });
+    if (!res.ok) {
+      alert("참여자번호 배정에 실패했습니다.");
+      return;
+    }
     setParticipants((prev) => prev.map((p) => (p.id === id ? { ...p, patient_code: code.trim() } : p)));
     setAssigningId(null);
     setAssignCode("");
@@ -216,10 +225,21 @@ export default function AdminPage() {
     a.click();
   }
 
+  async function handleLogout() {
+    await fetch("/api/admin-logout", { method: "POST" });
+    window.location.href = "/admin/login";
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-gray-900">관리자 대시보드</h1>
+        <button
+          onClick={handleLogout}
+          className="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition-colors"
+        >
+          로그아웃
+        </button>
       </div>
 
       {/* Tabs */}
