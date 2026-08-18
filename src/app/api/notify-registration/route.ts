@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
   });
 
   const text = [
-    "[암증상설문조사] 새로운 참여신청이 있습니다",
+    "[연구참여신청]",
     "",
     `신청일시: ${appliedAt}`,
     `이름: ${name}`,
