@@ -72,39 +72,34 @@ function QlqContent() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-2">
+      <div className="card space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-bold text-gray-900">EORTC QLQ-C30</h2>
-          <span className="text-sm text-gray-500">{answeredCount} / {totalCount} 완료</span>
+          <h2 className="text-xl font-bold text-gray-900">삶의 질 설문</h2>
+          <span className="text-base text-gray-700">{answeredCount} / {totalCount} 완료</span>
         </div>
-        <div className="w-full bg-gray-100 rounded-full h-2">
+        <div className="w-full bg-gray-200 rounded-full h-3">
           <div
-            className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+            className="bg-blue-600 h-3 rounded-full transition-all duration-300"
             style={{ width: `${(answeredCount / totalCount) * 100}%` }}
           />
         </div>
-        <p className="text-xs text-gray-500">
+        <p className="text-base text-gray-700">
           귀하의 건강 상태와 일상 기능에 관한 질문입니다. 해당하는 응답을 선택해 주세요.
         </p>
       </div>
 
       {/* Error banner */}
       {errorNos.size > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-amber-800">
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>
-            <strong>{errorNos.size}개 항목</strong>에 응답하지 않으셨습니다. 빨간 테두리 항목을 확인해 주세요.
-          </span>
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-xl px-4 py-3 text-base text-amber-900">
+          ⚠ 답하지 않은 문항이 <strong>{errorNos.size}개</strong> 있어요. 빨간 테두리 문항에 답해 주세요.
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Group 1: Physical (Q1-5) */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-6">
-          <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">신체 기능 (Q1–5)</h3>
-          <p className="text-xs text-gray-500">
+        <div className="card space-y-6">
+          <h3 className="text-lg font-bold text-gray-900 border-b pb-2">신체 기능 (Q1–5)</h3>
+          <p className="text-base text-gray-700">
             다음 질문들은 신체 활동에 관한 것입니다. 해당하는 응답을 선택해 주세요.
           </p>
           {QLQ_QUESTIONS.filter((q) => q.no <= 5).map((q) => (
@@ -120,9 +115,9 @@ function QlqContent() {
         </div>
 
         {/* Group 2: Functioning + Symptoms (Q6-28) */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-6">
-          <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">지난 한 주 기준 (Q6–28)</h3>
-          <p className="text-xs text-gray-500">
+        <div className="card space-y-6">
+          <h3 className="text-lg font-bold text-gray-900 border-b pb-2">지난 한 주 기준 (Q6–28)</h3>
+          <p className="text-base text-gray-700">
             지난 한 주를 기준으로 응답해 주세요.
           </p>
           {QLQ_QUESTIONS.filter((q) => q.no >= 6 && q.no <= 28).map((q) => (
@@ -138,9 +133,9 @@ function QlqContent() {
         </div>
 
         {/* Group 3: Global QoL (Q29-30) */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-6">
-          <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">전반적 건강상태 및 삶의 질 (Q29–30)</h3>
-          <p className="text-xs text-gray-500">
+        <div className="card space-y-6">
+          <h3 className="text-lg font-bold text-gray-900 border-b pb-2">전반적 건강상태 및 삶의 질 (Q29–30)</h3>
+          <p className="text-base text-gray-700">
             지난 한 주를 기준으로, 1(매우 나쁨)에서 7(아주 좋음) 중 해당하는 숫자를 선택해 주세요.
           </p>
           {QLQ_QUESTIONS.filter((q) => q.no >= 29).map((q) => (
@@ -159,16 +154,16 @@ function QlqContent() {
         <button
           type="submit"
           disabled={submitting}
-          className={`w-full py-3 text-white font-semibold rounded-xl transition-colors ${
+          className={`w-full min-h-[64px] text-lg text-white font-bold rounded-xl transition-colors ${
             unansweredCount > 0
-              ? "bg-amber-500 hover:bg-amber-600"
+              ? "bg-amber-600 hover:bg-amber-700"
               : "bg-green-600 hover:bg-green-700"
-          } disabled:bg-gray-200 disabled:text-gray-400`}
+          } disabled:bg-gray-200 disabled:text-gray-500`}
         >
           {submitting
             ? "제출 중..."
             : unansweredCount > 0
-            ? `미응답 ${unansweredCount}개 확인 →`
+            ? `답하지 않은 문항이 ${unansweredCount}개 있어요`
             : "설문 완료 및 제출 ✓"}
         </button>
       </form>
@@ -195,18 +190,18 @@ function QuestionRow({
     <div
       id={`q-${q.no}`}
       className={`rounded-xl border-2 p-4 space-y-3 transition-colors ${
-        hasError ? "border-red-400 bg-red-50" : "border-transparent"
+        hasError ? "border-red-500" : "border-transparent"
       }`}
     >
-      <div className="flex items-start gap-2">
-        <span className={`mt-0.5 w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 ${
-          hasError ? "bg-red-100 text-red-600" : "bg-blue-100 text-blue-700"
+      <div className="flex items-start gap-3">
+        <span className={`mt-0.5 w-8 h-8 rounded-full text-base font-bold flex items-center justify-center flex-shrink-0 ${
+          hasError ? "bg-red-100 text-red-700" : "bg-blue-100 text-blue-800"
         }`}>
           {q.no}
         </span>
-        <p className="text-sm text-gray-800 leading-snug">{q.text}</p>
-        {hasError && <span className="ml-auto text-xs text-red-500 font-medium whitespace-nowrap">응답 필요</span>}
+        <p className="text-lg text-gray-900 leading-snug break-keep">{q.text}</p>
       </div>
+      {hasError && <p className="text-base font-semibold text-red-700">⚠ 이 문항에 답해 주세요</p>}
 
       {sevenPoint ? (
         <div className="flex gap-1 flex-wrap justify-between mt-2">
@@ -218,15 +213,15 @@ function QuestionRow({
                 key={v}
                 type="button"
                 onClick={() => onChange(v)}
-                className={`flex-1 min-w-[36px] flex flex-col items-center gap-1 py-2 px-1 rounded-lg border text-xs transition-all ${
+                className={`flex-1 min-w-[40px] min-h-[56px] flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-lg border-2 text-base transition-all ${
                   selected
-                    ? "bg-blue-600 border-blue-600 text-white font-bold"
-                    : "bg-white border-gray-200 text-gray-600 hover:border-blue-300"
+                    ? "bg-blue-600 border-blue-700 text-white font-bold"
+                    : "bg-white border-gray-300 text-gray-800 hover:border-blue-400"
                 }`}
               >
-                <span className="font-semibold">{v}</span>
+                <span className="font-bold">{selected ? "✓" : v}</span>
                 {(v === 1 || v === 7) && (
-                  <span className="text-[10px] leading-tight text-center whitespace-pre-line opacity-80">
+                  <span className="text-xs leading-tight text-center whitespace-pre-line opacity-90">
                     {v === 1 ? "매우\n나쁨" : "아주\n좋음"}
                   </span>
                 )}
@@ -235,7 +230,7 @@ function QuestionRow({
           })}
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-2 mt-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
           {labels.map((label, idx) => {
             const v = idx + 1;
             const selected = value === v;
@@ -244,12 +239,13 @@ function QuestionRow({
                 key={v}
                 type="button"
                 onClick={() => onChange(v)}
-                className={`py-2 px-1 rounded-lg border text-xs text-center transition-all ${
+                className={`min-h-[56px] py-2 px-1 rounded-lg border-2 text-base text-center transition-all ${
                   selected
-                    ? "bg-blue-600 border-blue-600 text-white font-bold"
-                    : "bg-white border-gray-200 text-gray-600 hover:border-blue-300"
+                    ? "bg-blue-600 border-blue-700 text-white font-bold"
+                    : "bg-white border-gray-300 text-gray-800 hover:border-blue-400"
                 }`}
               >
+                {selected && <span aria-hidden>✓ </span>}
                 {label}
               </button>
             );
@@ -262,7 +258,7 @@ function QuestionRow({
 
 export default function QlqC30Page() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400">설문을 불러오는 중...</div>}>
+    <Suspense fallback={<div className="flex items-center justify-center py-20 text-lg text-gray-600">설문을 불러오는 중...</div>}>
       <QlqContent />
     </Suspense>
   );

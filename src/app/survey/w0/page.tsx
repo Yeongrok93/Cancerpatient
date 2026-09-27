@@ -107,58 +107,55 @@ function W0Content() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-2">
-        <h2 className="font-bold text-gray-900">W0 통합설문지</h2>
-        <p className="text-xs text-gray-500">기본정보 및 신체활동(IPAQ)에 관한 설문입니다.</p>
+      <div className="card space-y-2">
+        <h2 className="text-xl font-bold text-gray-900">기본정보 설문</h2>
+        <p className="text-base text-gray-700">기본정보 및 신체활동(IPAQ)에 관한 설문입니다.</p>
       </div>
 
       {/* Error banner */}
       {errorKeys.size > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-amber-800">
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span><strong>{errorKeys.size}개 항목</strong>에 응답하지 않으셨습니다.</span>
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-xl px-4 py-3 text-base text-amber-900">
+          ⚠ 답하지 않은 문항이 <strong>{errorKeys.size}개</strong> 있어요.
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Part I — Demographics */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-6">
-          <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">Part I. 기본 정보</h3>
+        <div className="card space-y-6">
+          <h3 className="text-lg font-bold text-gray-900 border-b pb-2">Part I. 기본 정보</h3>
           {DEMOGRAPHICS.map((q, idx) => (
             <div
               key={q.key}
               id={`field-${q.key}`}
               className={`space-y-2 rounded-xl border-2 p-3 transition-colors ${
-                errorKeys.has(q.key) ? "border-red-400 bg-red-50" : "border-transparent"
+                errorKeys.has(q.key) ? "border-red-500" : "border-transparent"
               }`}
             >
-              <div className="flex items-center gap-2">
-                <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 ${
-                  errorKeys.has(q.key) ? "bg-red-100 text-red-600" : "bg-emerald-100 text-emerald-700"
+              <div className="flex items-center gap-3">
+                <span className={`w-8 h-8 rounded-full text-base font-bold flex items-center justify-center flex-shrink-0 ${
+                  errorKeys.has(q.key) ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-800"
                 }`}>{idx + 1}</span>
-                <p className="text-sm font-medium text-gray-800">{q.label}</p>
-                {errorKeys.has(q.key) && <span className="ml-auto text-xs text-red-500 font-medium">응답 필요</span>}
+                <p className="text-lg font-medium text-gray-900">{q.label}</p>
               </div>
+              {errorKeys.has(q.key) && <p className="text-base font-semibold text-red-700 pl-11">⚠ 이 문항에 답해 주세요</p>}
 
               {q.type === "number" && (
-                <div className="flex items-center gap-2 pl-8">
+                <div className="flex items-center gap-2 pl-11">
                   <input
                     type="number"
                     min={q.min}
                     max={q.max}
                     value={answers[q.key] ?? ""}
                     onChange={(e) => setAnswer(q.key, e.target.value)}
-                    className="w-24 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                    className="w-28 min-h-[56px] px-3 py-2 border-2 border-gray-300 rounded-lg text-lg focus:outline-none focus:ring-2 focus:ring-emerald-400"
                     placeholder="숫자 입력"
                   />
-                  {q.unit && <span className="text-sm text-gray-500">{q.unit}</span>}
+                  {q.unit && <span className="text-lg text-gray-700">{q.unit}</span>}
                 </div>
               )}
 
               {q.type === "radio" && (
-                <div className="flex flex-wrap gap-2 pl-8">
+                <div className="flex flex-wrap gap-2 pl-11">
                   {q.options.map((opt) => {
                     const selected = answers[q.key] === opt.value;
                     return (
@@ -166,12 +163,13 @@ function W0Content() {
                         key={opt.value}
                         type="button"
                         onClick={() => setAnswer(q.key, opt.value)}
-                        className={`px-3 py-1.5 rounded-lg border text-sm transition-all ${
+                        className={`min-h-[56px] px-4 py-2 rounded-lg border-2 text-lg transition-all ${
                           selected
-                            ? "bg-emerald-600 border-emerald-600 text-white font-semibold"
-                            : "bg-white border-gray-200 text-gray-600 hover:border-emerald-300"
+                            ? "bg-emerald-600 border-emerald-700 text-white font-bold"
+                            : "bg-white border-gray-300 text-gray-800 hover:border-emerald-400"
                         }`}
                       >
+                        {selected && <span aria-hidden>✓ </span>}
                         {opt.label}
                       </button>
                     );
@@ -186,20 +184,18 @@ function W0Content() {
         <div
           id={`field-${ECOG_KEY}`}
           className={`bg-white rounded-2xl shadow-sm border-2 p-5 space-y-4 transition-colors ${
-            errorKeys.has(ECOG_KEY) ? "border-red-400 bg-red-50" : "border-gray-100"
+            errorKeys.has(ECOG_KEY) ? "border-red-500" : "border-transparent"
           }`}
         >
-          <div className="flex items-center justify-between border-b pb-2">
-            <h3 className="text-sm font-semibold text-gray-700">Part II. 환자 보고형 ECOG</h3>
-            {errorKeys.has(ECOG_KEY) && <span className="text-xs text-red-500 font-medium">응답 필요</span>}
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 bg-emerald-100 text-emerald-700 mt-0.5">
+          <h3 className="text-lg font-bold text-gray-900 border-b pb-2">Part II. 환자 보고형 ECOG</h3>
+          <div className="flex items-start gap-3">
+            <span className="w-8 h-8 rounded-full text-base font-bold flex items-center justify-center flex-shrink-0 bg-emerald-100 text-emerald-800 mt-0.5">
               {ecogNumber}
             </span>
-            <p className="text-sm text-gray-700">{ECOG_LABEL}</p>
+            <p className="text-lg text-gray-900">{ECOG_LABEL}</p>
           </div>
-          <div className="pl-8 space-y-2">
+          {errorKeys.has(ECOG_KEY) && <p className="text-base font-semibold text-red-700 pl-11">⚠ 이 문항에 답해 주세요</p>}
+          <div className="pl-11 space-y-3">
             {ECOG_OPTIONS.map((opt) => {
               const selected = answers[ECOG_KEY] === opt.value;
               return (
@@ -207,14 +203,14 @@ function W0Content() {
                   key={opt.value}
                   type="button"
                   onClick={() => setAnswer(ECOG_KEY, opt.value)}
-                  className={`w-full text-left px-3 py-2.5 rounded-xl border-2 transition-all ${
+                  className={`w-full min-h-[56px] text-left px-4 py-3 rounded-xl border-2 transition-all ${
                     selected
-                      ? "bg-emerald-600 border-emerald-600 text-white"
-                      : "bg-white border-gray-200 text-gray-700 hover:border-emerald-300"
+                      ? "bg-emerald-600 border-emerald-700 text-white"
+                      : "bg-white border-gray-300 text-gray-800 hover:border-emerald-400"
                   }`}
                 >
-                  <p className="text-sm font-semibold">{opt.label}</p>
-                  <p className={`text-xs mt-0.5 ${selected ? "text-emerald-50" : "text-gray-500"}`}>
+                  <p className="text-lg font-bold">{selected && <span aria-hidden>✓ </span>}{opt.label}</p>
+                  <p className={`text-base mt-0.5 ${selected ? "text-emerald-50" : "text-gray-600"}`}>
                     {opt.description}
                   </p>
                 </button>
@@ -224,9 +220,9 @@ function W0Content() {
         </div>
 
         {/* Part III — IPAQ */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-6">
-          <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">Part III. 신체활동 (IPAQ)</h3>
-          <p className="text-xs text-gray-500">
+        <div className="card space-y-6">
+          <h3 className="text-lg font-bold text-gray-900 border-b pb-2">Part III. 신체활동 (IPAQ)</h3>
+          <p className="text-base text-gray-700">
             지난 7일 동안의 신체활동을 평가합니다. 적어도 10분 이상 지속한 활동만 포함하세요.
           </p>
 
@@ -235,24 +231,24 @@ function W0Content() {
             const showDuration = days > 0;
             return (
               <div key={item.id} className="space-y-4 border-t pt-4 first:border-t-0 first:pt-0">
-                <div className="flex items-start gap-2">
-                  <span className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 bg-emerald-100 text-emerald-700 mt-0.5">
+                <div className="flex items-start gap-3">
+                  <span className="w-8 h-8 rounded-full text-base font-bold flex items-center justify-center flex-shrink-0 bg-emerald-100 text-emerald-800 mt-0.5">
                     {ipaqBaseNumber + itemIdx * 2 + 1}
                   </span>
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">{item.activityLabel}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{item.description}</p>
+                    <p className="text-lg font-bold text-gray-900">{item.activityLabel}</p>
+                    <p className="text-base text-gray-700 mt-0.5">{item.description}</p>
                   </div>
                 </div>
 
                 {/* Days question */}
                 <div
                   id={`field-${item.daysKey}`}
-                  className={`pl-8 space-y-2 rounded-lg border-2 p-3 transition-colors ${
-                    errorKeys.has(item.daysKey) ? "border-red-400 bg-red-50" : "border-transparent"
+                  className={`sm:pl-11 space-y-2 rounded-lg border-2 p-3 transition-colors ${
+                    errorKeys.has(item.daysKey) ? "border-red-500" : "border-transparent"
                   }`}
                 >
-                  <p className="text-sm text-gray-700">{item.daysLabel}</p>
+                  <p className="text-lg text-gray-900">{item.daysLabel}</p>
                   <div className="flex flex-wrap gap-2">
                     {Array.from({ length: 8 }, (_, i) => i).map((d) => {
                       const selected = answers[item.daysKey] === d;
@@ -261,10 +257,10 @@ function W0Content() {
                           key={d}
                           type="button"
                           onClick={() => setAnswer(item.daysKey, d)}
-                          className={`w-9 h-9 rounded-lg border text-sm font-semibold transition-all ${
+                          className={`w-12 h-12 rounded-lg border-2 text-lg font-bold transition-all ${
                             selected
-                              ? "bg-emerald-600 border-emerald-600 text-white"
-                              : "bg-white border-gray-200 text-gray-600 hover:border-emerald-300"
+                              ? "bg-emerald-600 border-emerald-700 text-white"
+                              : "bg-white border-gray-300 text-gray-800 hover:border-emerald-400"
                           }`}
                         >
                           {d}
@@ -272,20 +268,20 @@ function W0Content() {
                       );
                     })}
                   </div>
-                  {errorKeys.has(item.daysKey) && <p className="text-xs text-red-500">응답 필요</p>}
+                  {errorKeys.has(item.daysKey) && <p className="text-base font-semibold text-red-700">⚠ 이 문항에 답해 주세요</p>}
                 </div>
 
                 {/* Duration (only if days > 0) */}
                 {showDuration && (
                   <div
                     id={`field-${item.hoursKey}`}
-                    className={`pl-8 space-y-2 rounded-lg border-2 p-3 transition-colors ${
+                    className={`sm:pl-11 space-y-2 rounded-lg border-2 p-3 transition-colors ${
                       errorKeys.has(item.hoursKey) || errorKeys.has(item.minutesKey)
-                        ? "border-red-400 bg-red-50"
+                        ? "border-red-500"
                         : "border-transparent"
                     }`}
                   >
-                    <p className="text-sm text-gray-700">{item.durationLabel}</p>
+                    <p className="text-lg text-gray-900">{item.durationLabel}</p>
                     <DurationInput
                       hoursKey={item.hoursKey}
                       minutesKey={item.minutesKey}
@@ -293,7 +289,7 @@ function W0Content() {
                       setAnswer={setAnswer}
                     />
                     {(errorKeys.has(item.hoursKey) || errorKeys.has(item.minutesKey)) && (
-                      <p className="text-xs text-red-500">시간 또는 분을 입력해 주세요</p>
+                      <p className="text-base font-semibold text-red-700">⚠ 시간 또는 분을 입력해 주세요</p>
                     )}
                   </div>
                 )}
@@ -307,17 +303,17 @@ function W0Content() {
               id={`field-${SITTING_KEYS.hours}`}
               className={`space-y-2 rounded-lg border-2 p-3 transition-colors ${
                 errorKeys.has(SITTING_KEYS.hours) || errorKeys.has(SITTING_KEYS.minutes)
-                  ? "border-red-400 bg-red-50"
+                  ? "border-red-500"
                   : "border-transparent"
               }`}
             >
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 bg-emerald-100 text-emerald-700">
+              <div className="flex items-center gap-3">
+                <span className="w-8 h-8 rounded-full text-base font-bold flex items-center justify-center flex-shrink-0 bg-emerald-100 text-emerald-800">
                   {sittingNumber}
                 </span>
-                <p className="text-sm text-gray-700">{SITTING_LABEL}</p>
+                <p className="text-lg text-gray-900">{SITTING_LABEL}</p>
               </div>
-              <div className="pl-8">
+              <div className="sm:pl-11">
                 <DurationInput
                   hoursKey={SITTING_KEYS.hours}
                   minutesKey={SITTING_KEYS.minutes}
@@ -326,17 +322,17 @@ function W0Content() {
                 />
               </div>
               {(errorKeys.has(SITTING_KEYS.hours) || errorKeys.has(SITTING_KEYS.minutes)) && (
-                <p className="text-xs text-red-500 pl-8">시간 또는 분을 입력해 주세요</p>
+                <p className="text-base font-semibold text-red-700 sm:pl-11">⚠ 시간 또는 분을 입력해 주세요</p>
               )}
             </div>
           </div>
         </div>
 
         {/* Part IV — Emergency screening */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-6">
+        <div className="card space-y-6">
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 border-b pb-2">Part IV. 응급 선별문항</h3>
-            <p className="text-xs text-gray-500 pt-2">
+            <h3 className="text-lg font-bold text-gray-900 border-b pb-2">Part IV. 응급 선별문항</h3>
+            <p className="text-base text-gray-700 pt-2">
               최근 상태 중 응급 처치가 필요할 수 있는 증상이 있는지 확인합니다.
             </p>
           </div>
@@ -346,20 +342,20 @@ function W0Content() {
               key={q.key}
               id={`field-${q.key}`}
               className={`space-y-2 rounded-xl border-2 p-3 transition-colors ${
-                errorKeys.has(q.key) ? "border-red-400 bg-red-50" : "border-transparent"
+                errorKeys.has(q.key) ? "border-red-500" : "border-transparent"
               }`}
             >
-              <div className="flex items-start gap-2">
-                <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                  errorKeys.has(q.key) ? "bg-red-100 text-red-600" : "bg-emerald-100 text-emerald-700"
+              <div className="flex items-start gap-3">
+                <span className={`w-8 h-8 rounded-full text-base font-bold flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                  errorKeys.has(q.key) ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-800"
                 }`}>{emergencyBaseNumber + qIdx}</span>
                 <div>
-                  <p className="text-xs font-semibold text-gray-500">{q.title}</p>
-                  <p className="text-sm font-medium text-gray-800">{q.question}</p>
+                  <p className="text-sm font-semibold text-gray-600">{q.title}</p>
+                  <p className="text-lg font-medium text-gray-900">{q.question}</p>
                 </div>
-                {errorKeys.has(q.key) && <span className="ml-auto text-xs text-red-500 font-medium flex-shrink-0">응답 필요</span>}
               </div>
-              <div className="flex flex-wrap gap-2 pl-8">
+              {errorKeys.has(q.key) && <p className="text-base font-semibold text-red-700 pl-11">⚠ 이 문항에 답해 주세요</p>}
+              <div className="flex flex-wrap gap-2 pl-11">
                 {q.options.map((opt) => {
                   const selected = answers[q.key] === opt.value;
                   return (
@@ -367,12 +363,13 @@ function W0Content() {
                       key={opt.value}
                       type="button"
                       onClick={() => setAnswer(q.key, opt.value)}
-                      className={`px-3 py-1.5 rounded-lg border text-sm transition-all ${
+                      className={`min-h-[56px] px-4 py-2 rounded-lg border-2 text-lg transition-all ${
                         selected
-                          ? "bg-emerald-600 border-emerald-600 text-white font-semibold"
-                          : "bg-white border-gray-200 text-gray-600 hover:border-emerald-300"
+                          ? "bg-emerald-600 border-emerald-700 text-white font-bold"
+                          : "bg-white border-gray-300 text-gray-800 hover:border-emerald-400"
                       }`}
                     >
+                      {selected && <span aria-hidden>✓ </span>}
                       {opt.label}
                     </button>
                   );
@@ -385,16 +382,16 @@ function W0Content() {
         <button
           type="submit"
           disabled={submitting}
-          className={`w-full py-3 text-white font-semibold rounded-xl transition-colors ${
+          className={`w-full min-h-[64px] text-lg text-white font-bold rounded-xl transition-colors ${
             unansweredCount > 0
-              ? "bg-amber-500 hover:bg-amber-600"
+              ? "bg-amber-600 hover:bg-amber-700"
               : "bg-green-600 hover:bg-green-700"
-          } disabled:bg-gray-200 disabled:text-gray-400`}
+          } disabled:bg-gray-200 disabled:text-gray-500`}
         >
           {submitting
             ? "제출 중..."
             : unansweredCount > 0
-            ? `미응답 ${unansweredCount}개 확인 →`
+            ? `답하지 않은 문항이 ${unansweredCount}개 있어요`
             : "설문 완료 및 제출 ✓"}
         </button>
       </form>
@@ -414,30 +411,30 @@ function DurationInput({
   setAnswer: (key: string, val: number | string) => void;
 }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex items-center gap-1.5">
+    <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-2">
         <input
           type="number"
           min={0}
           max={24}
           value={answers[hoursKey] ?? ""}
           onChange={(e) => setAnswer(hoursKey, e.target.value)}
-          className="w-16 px-2 py-2 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          className="w-20 min-h-[56px] px-2 py-2 border-2 border-gray-300 rounded-lg text-lg text-center focus:outline-none focus:ring-2 focus:ring-emerald-400"
           placeholder="0"
         />
-        <span className="text-sm text-gray-500">시간</span>
+        <span className="text-lg text-gray-700">시간</span>
       </div>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-2">
         <input
           type="number"
           min={0}
           max={59}
           value={answers[minutesKey] ?? ""}
           onChange={(e) => setAnswer(minutesKey, e.target.value)}
-          className="w-16 px-2 py-2 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-emerald-400"
+          className="w-20 min-h-[56px] px-2 py-2 border-2 border-gray-300 rounded-lg text-lg text-center focus:outline-none focus:ring-2 focus:ring-emerald-400"
           placeholder="0"
         />
-        <span className="text-sm text-gray-500">분</span>
+        <span className="text-lg text-gray-700">분</span>
       </div>
     </div>
   );
@@ -445,7 +442,7 @@ function DurationInput({
 
 export default function W0Page() {
   return (
-    <Suspense fallback={<div className="flex items-center justify-center py-20 text-gray-400">설문을 불러오는 중...</div>}>
+    <Suspense fallback={<div className="flex items-center justify-center py-20 text-lg text-gray-600">설문을 불러오는 중...</div>}>
       <W0Content />
     </Suspense>
   );
