@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { getResumableProCtcaeSession, startSurveySession } from "@/lib/actions";
 
 const SURVEYS = [
   {
@@ -43,18 +43,11 @@ function SelectContent() {
   useEffect(() => {
     if (!code) return;
     let cancelled = false;
-    supabase
-      .from("survey_sessions")
-      .select("id")
-      .eq("patient_code", code)
-      .eq("survey_type", "pro_ctcae")
-      .eq("is_complete", false)
-      .order("started_at", { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!cancelled) setResumeSessionId(data?.id ?? null);
-      });
+    getResumableProCtcaeSession(code)
+      .then((id) => {
+        if (!cancelled) setResumeSessionId(id);
+      })
+      .catch((err) => console.error(err));
     return () => {
       cancelled = true;
     };
@@ -62,20 +55,12 @@ function SelectContent() {
 
   async function handleSelect(survey: (typeof SURVEYS)[number]) {
     if (!code) return;
-    if (survey.type === "pro_ctcae" && resumeSessionId) {
-      router.push(`${survey.route}?session=${resumeSessionId}`);
-      return;
-    }
     setLoadingType(survey.type);
     try {
-      const { data, error } = await supabase
-        .from("survey_sessions")
-        .insert({ patient_code: code, survey_type: survey.type })
-        .select("id")
-        .single();
-
-      if (error) throw error;
-      router.push(`${survey.route}?session=${data.id}`);
+      // For PRO-CTCAE this returns the unfinished session if there is one.
+      const result = await startSurveySession(code, survey.type);
+      if (!result.ok) throw new Error(result.error);
+      router.push(`${survey.route}?session=${result.sessionId}`);
     } catch (err) {
       console.error(err);
       alert("오류가 발생했습니다. 다시 시도해 주세요.");

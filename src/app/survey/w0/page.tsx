@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { submitW0 } from "@/lib/actions";
 import {
   DEMOGRAPHICS,
   ECOG_KEY,
@@ -74,39 +74,18 @@ function W0Content() {
 
     setSubmitting(true);
     try {
-      const rows = Object.entries(answers).map(([key, val]) => {
-        const numeric = typeof val === "number" || (typeof val === "string" && !isNaN(Number(val)));
-        return {
-          session_id: sessionId,
-          question_key: key,
-          answer_choice: typeof val === "number" ? val : null,
-          answer_number: numeric && typeof val === "string" ? Number(val) : null,
-          answer_text: typeof val === "string" ? val : null,
-        };
-      });
-
-      // Simplify: store everything as answer_number when parseable, else answer_text
+      // Store everything as answer_number when parseable, else answer_text
       const cleanRows = Object.entries(answers).map(([key, val]) => {
         const n = Number(val);
         return {
-          session_id: sessionId,
           question_key: key,
-          answer_choice: null as number | null,
           answer_number: !isNaN(n) ? n : null,
           answer_text: isNaN(n) ? String(val) : null,
         };
       });
-      void rows; // unused
 
-      const { error: upsertErr } = await supabase
-        .from("w0_answers")
-        .upsert(cleanRows, { onConflict: "session_id,question_key" });
-      if (upsertErr) throw upsertErr;
-
-      await supabase
-        .from("survey_sessions")
-        .update({ is_complete: true, completed_at: new Date().toISOString() })
-        .eq("id", sessionId);
+      const result = await submitW0(sessionId, cleanRows);
+      if (!result.ok) throw new Error(result.error);
 
       router.push(`/survey/complete?session=${sessionId}`);
     } catch (err) {

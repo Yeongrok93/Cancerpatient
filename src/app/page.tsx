@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { findPatientCode } from "@/lib/actions";
 
 export default function StartPage() {
   const router = useRouter();
@@ -18,11 +18,7 @@ export default function StartPage() {
     setChecking(true);
     setError("");
     try {
-      const { data: patientCode, error: queryError } = await supabase.rpc("find_patient_code", {
-        p_name: name.trim(),
-        p_birth: birth,
-      });
-      if (queryError) throw queryError;
+      const patientCode = await findPatientCode(name.trim(), birth);
 
       if (!patientCode) {
         setError("입력하신 정보와 일치하는 참여자를 찾을 수 없습니다. 이름·생년월일을 다시 확인해 주세요.");

@@ -2,30 +2,23 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import {
+  adminListSessions,
+  adminGetSessionAnswers,
+  adminListParticipants,
+  adminAssignPatientCode,
+  adminListMessages,
+  adminUnreadMessageCount,
+  adminSetMessageRead,
+  type AdminSession,
+  type AdminAnswer,
+  type AdminParticipant,
+  type AdminMessage,
+} from "@/lib/adminActions";
 import { SURVEY_ITEMS, RESPONSE_OPTIONS } from "@/lib/questions";
 
-type Session = {
-  id: string;
-  patient_code: string | null;
-  survey_type: string | null;
-  age: number | null;
-  gender: string | null;
-  cancer_type: string | null;
-  treatment_type: string | null;
-  started_at: string;
-  completed_at: string | null;
-  is_complete: boolean;
-  additional_comments: string | null;
-};
-
-type Answer = {
-  item_id: number;
-  question_key: string;
-  question_type: string;
-  answer_value: number | null;
-  answer_boolean: boolean | null;
-};
+type Session = AdminSession;
+type Answer = AdminAnswer;
 
 function SurveyTypeBadge({ type }: { type: string | null }) {
   const map: Record<string, { label: string; cls: string }> = {
@@ -58,24 +51,8 @@ function formatDate(iso: string) {
   });
 }
 
-type Participant = {
-  id: string;
-  name: string;
-  record_or_birth: string;
-  contact: string;
-  research_types: string | null;
-  consent_agreed: boolean;
-  applied_at: string;
-  patient_code: string | null;
-};
-
-type PatientMessage = {
-  id: string;
-  patient_code: string;
-  message: string;
-  created_at: string;
-  is_read: boolean;
-};
+type Participant = AdminParticipant;
+type PatientMessage = AdminMessage;
 
 export default function AdminPage() {
   const [tab, setTab] = useState<"surveys" | "participants" | "messages">("surveys");
@@ -94,12 +71,11 @@ export default function AdminPage() {
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from("survey_sessions")
-        .select("*")
-        .order("started_at", { ascending: false })
-        .limit(200);
-      setSessions(data ?? []);
+      try {
+        setSessions(await adminListSessions());
+      } catch (err) {
+        console.error(err);
+      }
       setLoading(false);
     }
     load();
@@ -117,10 +93,9 @@ export default function AdminPage() {
   useEffect(() => {
     if (tab !== "participants") return;
     setParticipantsLoading(true);
-    fetch("/api/admin/participants")
-      .then((res) => res.json())
-      .then(({ data }) => {
-        setParticipants(data ?? []);
+    adminListParticipants()
+      .then((data) => {
+        setParticipants(data);
         setParticipantsLoading(false);
       })
       .catch((err) => {
@@ -130,40 +105,29 @@ export default function AdminPage() {
   }, [tab]);
 
   useEffect(() => {
-    supabase
-      .from("patient_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("is_read", false)
-      .then(({ count }) => setUnreadCount(count ?? 0));
+    adminUnreadMessageCount()
+      .then(setUnreadCount)
+      .catch((err) => console.error(err));
   }, []);
 
   useEffect(() => {
     if (tab !== "messages") return;
     setMessagesLoading(true);
-    supabase
-      .from("patient_messages")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200)
-      .then(({ data }) => {
-        setMessages(data ?? []);
-        setMessagesLoading(false);
-      });
+    adminListMessages()
+      .then((data) => setMessages(data))
+      .catch((err) => console.error(err))
+      .finally(() => setMessagesLoading(false));
   }, [tab]);
 
   async function toggleMessageRead(id: string, isRead: boolean) {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, is_read: isRead } : m)));
     setUnreadCount((prev) => Math.max(0, prev + (isRead ? -1 : 1)));
-    await supabase.from("patient_messages").update({ is_read: isRead }).eq("id", id);
+    await adminSetMessageRead(id, isRead);
   }
 
   async function assignPatientCode(id: string, code: string) {
     if (!code.trim()) return;
-    const res = await fetch("/api/admin/participants", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, patient_code: code.trim() }),
-    });
+    const res = await adminAssignPatientCode(id, code.trim()).catch(() => ({ ok: false }));
     if (!res.ok) {
       alert("참여자번호 배정에 실패했습니다.");
       return;
@@ -176,12 +140,11 @@ export default function AdminPage() {
   async function viewAnswers(sessionId: string) {
     setSelectedId(sessionId);
     setAnswerLoading(true);
-    const { data } = await supabase
-      .from("survey_answers")
-      .select("item_id, question_key, question_type, answer_value, answer_boolean")
-      .eq("session_id", sessionId)
-      .order("item_id");
-    setSelectedAnswers(data ?? []);
+    const data = await adminGetSessionAnswers(sessionId).catch((err) => {
+      console.error(err);
+      return [];
+    });
+    setSelectedAnswers(data);
     setAnswerLoading(false);
   }
 
@@ -458,6 +421,7 @@ export default function AdminPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연락처</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연구종류</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">신청일</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">문자알림</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">참여자번호</th>
                   </tr>
                 </thead>
@@ -476,6 +440,15 @@ export default function AdminPage() {
                       </td>
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap text-xs">
                         {formatDate(p.applied_at)}
+                      </td>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap">
+                        {p.sms_notified === true ? (
+                          <span className="text-green-700">발송됨</span>
+                        ) : p.sms_notified === false ? (
+                          <span className="text-red-600 font-medium" title={p.sms_error ?? ""}>발송 실패</span>
+                        ) : (
+                          <span className="text-gray-400">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {assigningId === p.id ? (

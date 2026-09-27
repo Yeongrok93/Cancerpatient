@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { getSessionPatientCode, sendPatientMessage } from "@/lib/actions";
 
 type Status = "idle" | "open" | "submitting" | "sent";
 
@@ -25,14 +25,11 @@ export default function ContactFab() {
       return;
     }
     let cancelled = false;
-    supabase
-      .from("survey_sessions")
-      .select("patient_code")
-      .eq("id", sessionParam)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!cancelled) setPatientCode(data?.patient_code ?? null);
-      });
+    getSessionPatientCode(sessionParam)
+      .then((code) => {
+        if (!cancelled) setPatientCode(code);
+      })
+      .catch((err) => console.error(err));
     return () => {
       cancelled = true;
     };
@@ -45,12 +42,8 @@ export default function ContactFab() {
     if (!message.trim()) return;
     setStatus("submitting");
     try {
-      const { error } = await supabase.from("patient_messages").insert({
-        patient_code: patientCode,
-        session_id: sessionParam ?? null,
-        message: message.trim(),
-      });
-      if (error) throw error;
+      const result = await sendPatientMessage(patientCode!, sessionParam ?? null, message.trim());
+      if (!result.ok) throw new Error(result.error);
       setStatus("sent");
       setMessage("");
       setTimeout(() => setStatus("idle"), 2000);

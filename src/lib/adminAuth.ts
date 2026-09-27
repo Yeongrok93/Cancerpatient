@@ -21,8 +21,11 @@ export async function computeAdminToken(): Promise<string | null> {
   return sha256Hex(`pro-ctcae-admin:${secret}`);
 }
 
-export async function isAdminRequest(req: NextRequest): Promise<boolean> {
+export async function isAdminToken(cookie: string | undefined): Promise<boolean> {
   const expected = await computeAdminToken();
-  const cookie = req.cookies.get(ADMIN_COOKIE_NAME)?.value;
   return !!expected && cookie === expected;
+}
+
+export async function isAdminRequest(req: NextRequest): Promise<boolean> {
+  return isAdminToken(req.cookies.get(ADMIN_COOKIE_NAME)?.value);
 }

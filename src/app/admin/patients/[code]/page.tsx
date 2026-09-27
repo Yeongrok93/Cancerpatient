@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase";
+import { adminGetPatientDashboard } from "@/lib/adminActions";
 import { SURVEY_ITEMS, RESPONSE_OPTIONS, SurveyItem } from "@/lib/questions";
 import { computeItemGrade, GRADE_COLORS, GRADE_LABELS } from "@/lib/proctcaeGrading";
 
@@ -63,28 +63,14 @@ export default function PatientDashboardPage() {
 
     async function load() {
       setLoading(true);
-      const { data: sessionData } = await supabase
-        .from("survey_sessions")
-        .select("id, completed_at, age, gender")
-        .eq("patient_code", code)
-        .eq("survey_type", "pro_ctcae")
-        .eq("is_complete", true)
-        .order("completed_at", { ascending: true });
-
-      const sessionRows = sessionData ?? [];
+      const data = await adminGetPatientDashboard(code).catch((err) => {
+        console.error(err);
+        return { sessions: [], answers: [] };
+      });
       if (cancelled) return;
-      setSessions(sessionRows);
-
-      if (sessionRows.length > 0) {
-        const { data: answerData } = await supabase
-          .from("survey_answers")
-          .select("session_id, item_id, question_key, question_type, answer_value")
-          .in("session_id", sessionRows.map((s) => s.id));
-        if (!cancelled) setAnswers(answerData ?? []);
-      } else {
-        setAnswers([]);
-      }
-      if (!cancelled) setLoading(false);
+      setSessions(data.sessions);
+      setAnswers(data.answers);
+      setLoading(false);
     }
 
     load();

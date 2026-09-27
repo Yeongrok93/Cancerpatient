@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import { submitQlqC30 } from "@/lib/actions";
 import { QLQ_QUESTIONS, FOUR_POINT_LABELS, SEVEN_POINT_LABELS } from "@/lib/qlq-c30";
 
 type AnswerMap = Record<number, number>; // question_no → answer_value (1-indexed for both scales)
@@ -52,20 +52,12 @@ function QlqContent() {
     setSubmitting(true);
     try {
       const rows = QLQ_QUESTIONS.map((q) => ({
-        session_id: sessionId,
         question_no: q.no,
         answer_value: answers[q.no],
       }));
 
-      const { error: upsertErr } = await supabase
-        .from("qlq_c30_answers")
-        .upsert(rows, { onConflict: "session_id,question_no" });
-      if (upsertErr) throw upsertErr;
-
-      await supabase
-        .from("survey_sessions")
-        .update({ is_complete: true, completed_at: new Date().toISOString() })
-        .eq("id", sessionId);
+      const result = await submitQlqC30(sessionId, rows);
+      if (!result.ok) throw new Error(result.error);
 
       router.push(`/survey/complete?session=${sessionId}`);
     } catch (err) {

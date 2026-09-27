@@ -2,7 +2,13 @@
 
 import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { supabase } from "@/lib/supabase";
+import {
+  loadProCtcaeSession,
+  saveProCtcaeAnswers,
+  clearProCtcaeAnswers,
+  submitProCtcae,
+  type ProCtcaeAnswer,
+} from "@/lib/actions";
 import {
   SURVEY_ITEMS,
   CATEGORIES,
@@ -28,16 +34,12 @@ function isUnanswered(val: unknown) {
   return val === undefined || val === null;
 }
 
-type SaveRow = { item_id: number; question_key: string; value: number | boolean };
+type SaveRow = ProCtcaeAnswer;
 
 async function postAnswers(sessionId: string, rows: SaveRow[]) {
   if (rows.length === 0) return;
-  const res = await fetch("/api/survey/answers", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId, rows }),
-  });
-  if (!res.ok) throw new Error(`save failed (${res.status})`);
+  const result = await saveProCtcaeAnswers(sessionId, rows);
+  if (!result.ok) throw new Error(`save failed (${result.error})`);
 }
 
 function SurveyContent() {
@@ -72,31 +74,22 @@ function SurveyContent() {
     }
     let cancelled = false;
     (async () => {
-      const [sessionRes, answersRes] = await Promise.all([
-        supabase.from("survey_sessions").select("is_complete").eq("id", sessionId).maybeSingle(),
-        supabase
-          .from("survey_answers")
-          .select("item_id, question_key, question_type, answer_value, answer_boolean")
-          .eq("session_id", sessionId),
-      ]).catch((err) => {
+      const res = await loadProCtcaeSession(sessionId).catch((err) => {
         console.error(err);
-        return [null, null] as const;
+        return null;
       });
       if (cancelled) return;
-      if (!sessionRes || !answersRes || sessionRes.error || answersRes.error) {
+      if (!res) {
         setLoadFailed(true);
         return;
       }
-      const session = sessionRes.data;
-      const rows = answersRes.data;
-      if (session?.is_complete) {
-        router.replace(`/survey/complete?session=${sessionId}`);
+      if (res.status !== "ok") {
+        router.replace(res.status === "complete" ? `/survey/complete?session=${sessionId}` : "/");
         return;
       }
       const map: AnswerMap = {};
-      (rows ?? []).forEach((r) => {
-        map[buildAnswerKey(r.item_id, r.question_key)] =
-          r.question_type === "presence" ? r.answer_boolean : r.answer_value;
+      res.answers.forEach((r) => {
+        map[buildAnswerKey(r.item_id, r.question_key)] = r.value;
       });
       const firstOpen = CATEGORIES.findIndex((cat) =>
         getItemsByCategory(cat).some((item) =>
@@ -125,12 +118,21 @@ function SurveyContent() {
     }
   }, [errorItemIds]);
 
+  // Writes run one at a time, in tap order — two quick taps on the same
+  // question must not land out of order and leave the older value saved.
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
+  function enqueueSave<T>(task: () => Promise<T>): Promise<T> {
+    const run = saveQueue.current.catch(() => undefined).then(task);
+    saveQueue.current = run;
+    return run;
+  }
+
   // Every tap is saved right away (not just on "다음"), so leaving the page
   // at any point loses nothing. A failure only shows a notice here — the
   // category save on "다음"/"제출" retries and blocks if it still fails.
   function saveInBackground(rows: SaveRow[]) {
     if (!sessionId) return;
-    postAnswers(sessionId, rows)
+    enqueueSave(() => postAnswers(sessionId, rows))
       .then(() => setSaveFailed(false))
       .catch((err) => {
         console.error(err);
@@ -182,13 +184,19 @@ function SurveyContent() {
       });
       return next;
     });
+    const questions = currentItems.flatMap((item) =>
+      item.questions.map((q) => ({ item_id: item.id, question_key: q.key, value: noSymptomValue(q.type) }))
+    );
     if (checked) {
       setErrorItemIds(new Set());
-      saveInBackground(
-        currentItems.flatMap((item) =>
-          item.questions.map((q) => ({ item_id: item.id, question_key: q.key, value: noSymptomValue(q.type) }))
-        )
-      );
+      saveInBackground(questions);
+    } else if (sessionId) {
+      // Remove them server-side too, or they'd reappear as "없음" on resume.
+      enqueueSave(() => clearProCtcaeAnswers(sessionId, questions))
+        .then((r) => {
+          if (!r.ok) setSaveFailed(true);
+        })
+        .catch(() => setSaveFailed(true));
     }
   }
 
@@ -208,7 +216,7 @@ function SurveyContent() {
           return isUnanswered(val) ? [] : [{ item_id: item.id, question_key: q.key, value: val as number | boolean }];
         })
       );
-      await postAnswers(sessionId, rows);
+      await enqueueSave(() => postAnswers(sessionId, rows));
       setSaveFailed(false);
     } finally {
       setSaving(false);
@@ -262,15 +270,8 @@ function SurveyContent() {
     setSubmitting(true);
     try {
       await saveCurrentCategory();
-      const { error } = await supabase
-        .from("survey_sessions")
-        .update({
-          is_complete: true,
-          completed_at: new Date().toISOString(),
-          additional_comments: additionalComment.trim() || null,
-        })
-        .eq("id", sessionId);
-      if (error) throw error;
+      const result = await submitProCtcae(sessionId, additionalComment);
+      if (!result.ok) throw new Error(result.error);
       router.push(`/survey/complete?session=${sessionId}`);
     } catch (err) {
       console.error(err);

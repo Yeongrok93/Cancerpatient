@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { registerParticipant } from "@/lib/actions";
 
 type Step = "form" | "done";
 
@@ -40,27 +40,14 @@ export default function RegisterPage() {
     if (!validate()) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase
-        .from("participants")
-        .insert({
-          name: name.trim(),
-          record_or_birth: recordOrBirth.trim(),
-          contact: contact.trim(),
-          research_types: researchTypes.join(","),
-          consent_agreed: true,
-        });
-      if (error) throw error;
-
-      fetch("/api/notify-registration", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: name.trim(),
-          recordOrBirth: recordOrBirth.trim(),
-          researchTypes,
-          contact: contact.trim(),
-        }),
-      }).catch((notifyErr) => console.error("Failed to notify registration:", notifyErr));
+      // Saves the application and texts the research team server-side.
+      const result = await registerParticipant({
+        name: name.trim(),
+        recordOrBirth: recordOrBirth.trim(),
+        contact: contact.trim(),
+        researchTypes,
+      });
+      if (!result.ok) throw new Error(result.error);
 
       setStep("done");
     } catch (err) {
