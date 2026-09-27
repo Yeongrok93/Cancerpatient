@@ -33,17 +33,12 @@ export default function RootLayout({
                 />
               </svg>
             </div>
-            <div>
-              <p className="text-xs text-gray-500 leading-none">NCI PRO-CTCAE™</p>
-              <p className="text-sm font-semibold text-gray-800 leading-tight">
-                암증상설문조사
-              </p>
-            </div>
+            <p className="text-lg font-bold text-gray-900">암 증상 설문조사</p>
           </div>
         </header>
         <main className="max-w-3xl mx-auto px-4 py-8">{children}</main>
         <footer className="mt-16 border-t border-gray-200 bg-white">
-          <div className="max-w-3xl mx-auto px-4 py-4 text-xs text-gray-400 text-center">
+          <div className="max-w-3xl mx-auto px-4 py-4 text-xs text-gray-600 text-center">
             NCI PRO-CTCAE™ Item Library Version 1.0 — 본 설문은 미국 국립암연구소(NCI)가
             개발한 도구의 한국어 번역판입니다.
           </div>

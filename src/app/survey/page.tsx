@@ -199,30 +199,32 @@ function SurveyContent() {
   return (
     <div className="space-y-6">
       {/* Progress */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
+      <div className="card space-y-3">
         <ProgressBar current={answeredCount} total={totalQuestions} />
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-gray-500">
-            {categoryIdx + 1} / {CATEGORIES.length} 단계
-          </span>
-          <span className="font-semibold text-gray-700">{currentCategory}</span>
-          {saving && <span className="text-xs text-primary-500 animate-pulse">저장 중…</span>}
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-base text-gray-700">
+              전체 {CATEGORIES.length}개 영역 중 {categoryIdx + 1}번째
+            </p>
+            <p className="text-xl font-bold text-gray-900">{currentCategory}</p>
+          </div>
+          {saving && <span className="text-sm text-primary-700 animate-pulse">저장 중…</span>}
         </div>
-        <div className="flex gap-1 flex-wrap">
+        <div className="hidden sm:flex gap-1.5 flex-wrap">
           {CATEGORIES.map((cat, i) => {
             const items = getItemsByCategory(cat);
-            const done = getUnansweredItems(items).length === 0 && items.every((item) =>
-              item.questions.some((q) => !isUnanswered(answers[buildAnswerKey(item.id, q.key)]))
+            const done = items.every((item) =>
+              item.questions.every((q) => !isUnanswered(answers[buildAnswerKey(item.id, q.key)]))
             );
             return (
               <span
                 key={cat}
-                className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                className={`px-2.5 py-1 rounded-full text-sm font-medium ${
                   i === categoryIdx
                     ? "bg-primary-600 text-white"
                     : done
-                    ? "bg-green-100 text-green-700"
-                    : "bg-gray-100 text-gray-500"
+                    ? "bg-green-100 text-green-800"
+                    : "bg-gray-100 text-gray-700"
                 }`}
               >
                 {cat}
@@ -233,34 +235,26 @@ function SurveyContent() {
       </div>
 
       {/* 모두 증상 없음 */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-3 flex items-center justify-between">
-        <span className="text-sm text-gray-600">이 카테고리의 증상이 모두 없으셨나요?</span>
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <span className="text-sm font-medium text-gray-700">모두 증상 없음</span>
-          <div
-            onClick={() => handleAllNone(!isAllNone)}
-            className={`w-11 h-6 rounded-full transition-colors duration-200 relative flex-shrink-0 ${
-              isAllNone ? "bg-primary-600" : "bg-gray-300"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${
-                isAllNone ? "translate-x-5" : "translate-x-0"
-              }`}
-            />
-          </div>
-        </label>
+      <div className="card space-y-3">
+        <p className="text-lg text-gray-800">이 영역의 증상이 모두 없으셨나요?</p>
+        <button
+          type="button"
+          onClick={() => handleAllNone(!isAllNone)}
+          aria-pressed={isAllNone}
+          className={`w-full min-h-[56px] px-4 py-3 rounded-xl border-2 text-lg font-bold transition-colors ${
+            isAllNone
+              ? "bg-primary-600 border-primary-700 text-white"
+              : "bg-white border-primary-600 text-primary-700 hover:bg-primary-50"
+          }`}
+        >
+          {isAllNone ? "✓ 모두 '없음'으로 선택됨 (다시 누르면 취소)" : "이 영역 증상이 모두 없었어요"}
+        </button>
       </div>
 
       {/* 미응답 경고 */}
       {errorItemIds.size > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2 text-sm text-amber-800">
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span>
-            아래 <strong>{errorItemIds.size}개 항목</strong>에 응답하지 않으셨습니다. 빨간 테두리 항목을 확인해 주세요.
-          </span>
+        <div className="bg-amber-50 border-2 border-amber-300 rounded-xl px-4 py-3 text-base text-amber-900">
+          ⚠ 답하지 않은 문항이 <strong>{errorItemIds.size}개</strong> 있어요. 빨간 테두리 문항에 답해 주세요.
         </div>
       )}
 
@@ -276,26 +270,24 @@ function SurveyContent() {
               key={item.id}
               id={`item-${item.id}`}
               ref={isFirstError ? firstErrorRef : undefined}
-              className={`bg-white rounded-2xl shadow-sm border-2 p-5 space-y-5 transition-colors ${
-                hasError ? "border-red-400" : "border-transparent"
+              className={`bg-white rounded-2xl shadow-sm border-2 p-4 sm:p-5 space-y-5 transition-colors ${
+                hasError ? "border-red-500" : "border-transparent"
               }`}
             >
               <div className="flex items-start gap-3">
-                <span className={`mt-0.5 w-7 h-7 rounded-full text-sm font-bold flex items-center justify-center flex-shrink-0 ${
-                  hasError ? "bg-red-100 text-red-600" : "bg-primary-100 text-primary-700"
+                <span className={`mt-0.5 w-8 h-8 rounded-full text-base font-bold flex items-center justify-center flex-shrink-0 ${
+                  hasError ? "bg-red-100 text-red-700" : "bg-primary-100 text-primary-800"
                 }`}>
                   {item.id}
                 </span>
-                <div>
-                  <p className="font-semibold text-gray-900">{item.termKo}</p>
-                  <p className="text-xs text-gray-400 mt-0.5">{item.termEn}</p>
-                </div>
-                {hasError && (
-                  <span className="ml-auto text-xs text-red-500 font-medium whitespace-nowrap">응답 필요</span>
-                )}
+                <p className="text-xl font-bold text-gray-900 break-keep">{item.termKo}</p>
               </div>
 
-              <div className="space-y-6 pl-10">
+              {hasError && (
+                <p className="text-base font-semibold text-red-700">⚠ 이 문항에 답해 주세요</p>
+              )}
+
+              <div className="space-y-7 sm:pl-11">
                 {item.questions.map((q) => {
                   const key = buildAnswerKey(item.id, q.key);
                   return (
@@ -316,19 +308,19 @@ function SurveyContent() {
 
       {/* 추가 의견 (선택) */}
       {isLast && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-3">
+        <div className="card space-y-3">
           <div>
-            <p className="text-sm font-semibold text-gray-800">
+            <p className="text-lg font-semibold text-gray-900 leading-relaxed break-keep">
               지난 일주일 동안 위에 답변하신 증상(부작용) 외에, 일상생활이나 재택 자가 관리 과정에서 의료진에게 추가로 알리고 싶거나 환자분이 느끼신 구체적인 어려움(신체적 고통, 정서적 스트레스, 생활의 제약 등)이 있다면 자유롭게 적어주십시오.
             </p>
-            <p className="text-xs text-gray-400 mt-1">선택 사항입니다. 해당 사항이 없으면 비워두셔도 됩니다.</p>
+            <p className="text-base text-gray-700 mt-1">선택 사항입니다. 해당 사항이 없으면 비워두셔도 됩니다.</p>
           </div>
           <textarea
             value={additionalComment}
             onChange={(e) => setAdditionalComment(e.target.value)}
             rows={5}
             placeholder="자유롭게 적어주세요 (선택 사항)"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 resize-y"
+            className="w-full px-3 py-3 border-2 border-gray-300 rounded-xl text-lg focus:outline-none focus:ring-2 focus:ring-primary-400 resize-y"
           />
         </div>
       )}
@@ -338,7 +330,7 @@ function SurveyContent() {
         {categoryIdx > 0 && (
           <button
             onClick={handlePrev}
-            className="flex-1 py-3 border border-gray-300 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+            className="flex-1 min-h-[64px] border-2 border-gray-400 rounded-xl text-lg text-gray-800 font-semibold hover:bg-gray-50 transition-colors"
           >
             ← 이전
           </button>
@@ -346,25 +338,25 @@ function SurveyContent() {
         {!isLast ? (
           <button
             onClick={handleNext}
-            className={`flex-1 py-3 text-white font-semibold rounded-xl transition-colors ${
+            className={`flex-[2] min-h-[64px] px-2 text-lg text-white font-bold rounded-xl transition-colors ${
               unansweredCount > 0
-                ? "bg-amber-500 hover:bg-amber-600"
+                ? "bg-amber-600 hover:bg-amber-700"
                 : "bg-primary-600 hover:bg-primary-700"
             }`}
           >
-            {unansweredCount > 0 ? `미응답 ${unansweredCount}개 확인 →` : "다음 →"}
+            {unansweredCount > 0 ? `답하지 않은 문항이 ${unansweredCount}개 있어요` : "다음 →"}
           </button>
         ) : (
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className={`flex-1 py-3 text-white font-semibold rounded-xl transition-colors ${
+            className={`flex-[2] min-h-[64px] px-2 text-lg text-white font-bold rounded-xl transition-colors ${
               unansweredCount > 0
-                ? "bg-amber-500 hover:bg-amber-600"
+                ? "bg-amber-600 hover:bg-amber-700"
                 : "bg-green-600 hover:bg-green-700"
-            } disabled:bg-gray-200 disabled:text-gray-400`}
+            } disabled:bg-gray-200 disabled:text-gray-500`}
           >
-            {submitting ? "제출 중..." : unansweredCount > 0 ? `미응답 ${unansweredCount}개 확인 →` : "설문 완료 및 제출 ✓"}
+            {submitting ? "제출 중..." : unansweredCount > 0 ? `답하지 않은 문항이 ${unansweredCount}개 있어요` : "설문 완료 및 제출 ✓"}
           </button>
         )}
       </div>

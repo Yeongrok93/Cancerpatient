@@ -16,11 +16,35 @@
     @apply sr-only;
   }
   .radio-option .radio-label {
-    @apply flex flex-col items-center gap-2 px-2 py-3 rounded-xl border-2 border-gray-200
-           transition-all duration-150 w-full text-center text-sm
+    @apply flex flex-col items-center justify-start gap-2 px-1 py-3 min-h-[96px] rounded-xl
+           border-2 border-gray-300 bg-white text-gray-800
+           transition-all duration-150 w-full h-full text-center
            hover:border-primary-400 hover:bg-primary-50;
   }
   .radio-option input[type="radio"]:checked + .radio-label {
-    @apply border-primary-600 bg-primary-100 text-primary-900 font-semibold;
+    @apply border-primary-700 bg-primary-600 text-white font-bold hover:bg-primary-600;
+  }
+  .radio-option input[type="radio"]:focus-visible + .radio-label {
+    @apply ring-4 ring-primary-300;
+  }
+
+  .field-input {
+    @apply w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+  }
+  .field-label {
+    @apply text-sm font-medium text-gray-700;
+  }
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-5;
+  }
+  .choice-pill {
+    @apply min-h-[56px] px-5 py-3 rounded-xl border-2 text-lg transition-all cursor-pointer select-none;
+  }
+  .choice-pill-active {
+    @apply bg-primary-600 border-primary-700 text-white font-bold;
+  }
+  .choice-pill-inactive {
+    @apply bg-white border-gray-300 text-gray-800 hover:border-primary-400 hover:bg-primary-50;
   }
 }

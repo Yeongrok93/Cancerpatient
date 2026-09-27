@@ -7,29 +7,26 @@ import { supabase } from "@/lib/supabase";
 const SURVEYS = [
   {
     type: "pro_ctcae" as const,
-    title: "PRO-CTCAE",
+    title: "증상 설문",
     subtitle: "암 치료 관련 증상 평가",
-    description: "NCI PRO-CTCAE™ 한국어판\n80가지 증상 항목 · 약 15~20분",
+    description: "80가지 증상 항목 · 약 15~20분",
     color: "border-primary-200 hover:border-primary-400",
-    badge: "bg-primary-100 text-primary-700",
     route: "/survey",
   },
   {
     type: "qlq_c30" as const,
-    title: "EORTC QLQ-C30",
+    title: "삶의 질 설문",
     subtitle: "삶의 질 평가",
-    description: "EORTC QLQ-C30 한국어판\n30문항 · 약 5~10분",
+    description: "30문항 · 약 5~10분",
     color: "border-blue-200 hover:border-blue-400",
-    badge: "bg-blue-100 text-blue-700",
     route: "/survey/qlq-c30",
   },
   {
     type: "w0" as const,
-    title: "W0 통합설문지",
+    title: "기본정보 설문",
     subtitle: "기본정보 + 신체활동",
-    description: "기본정보 7문항 + IPAQ 신체활동 7문항\n약 5분",
+    description: "기본정보 7문항 + 신체활동 7문항 · 약 5분",
     color: "border-emerald-200 hover:border-emerald-400",
-    badge: "bg-emerald-100 text-emerald-700",
     route: "/survey/w0",
   },
 ];
@@ -67,9 +64,9 @@ function SelectContent() {
   return (
     <div className="max-w-xl mx-auto space-y-6">
       <div className="text-center space-y-1 pt-4">
-        <p className="text-xs text-gray-500 font-mono">참여자번호: {code}</p>
-        <h1 className="text-xl font-bold text-gray-900">설문지 선택</h1>
-        <p className="text-sm text-gray-500">아래 설문지 중 하나를 선택하세요.</p>
+        <p className="text-sm text-gray-600 font-mono">참여자번호: {code}</p>
+        <h1 className="text-2xl font-bold text-gray-900">설문지 선택</h1>
+        <p className="text-lg text-gray-700">아래 설문지 중 하나를 선택하세요.</p>
       </div>
 
       <div className="space-y-4">
@@ -80,21 +77,18 @@ function SelectContent() {
             disabled={loadingType !== null}
             className={`w-full text-left bg-white rounded-2xl border-2 p-5 transition-all duration-150 shadow-sm hover:shadow-md disabled:opacity-60 disabled:cursor-not-allowed ${survey.color}`}
           >
-            <div className="flex items-start gap-4">
-              <span className={`mt-0.5 px-2 py-0.5 rounded-full text-xs font-bold ${survey.badge}`}>
-                {survey.type === "pro_ctcae" ? "증상" : survey.type === "qlq_c30" ? "삶의 질" : "기본정보"}
-              </span>
+            <div className="flex items-center gap-4">
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                  <p className="font-bold text-gray-900">{survey.title}</p>
+                  <p className="text-xl font-bold text-gray-900">{survey.title}</p>
                   {loadingType === survey.type && (
-                    <span className="text-xs text-primary-500 animate-pulse">로딩 중...</span>
+                    <span className="text-sm text-primary-700 animate-pulse">로딩 중...</span>
                   )}
                 </div>
-                <p className="text-sm text-gray-600 mt-0.5">{survey.subtitle}</p>
-                <p className="text-xs text-gray-400 mt-1 whitespace-pre-line">{survey.description}</p>
+                <p className="text-base text-gray-700 mt-0.5">{survey.subtitle}</p>
+                <p className="text-base text-gray-600 mt-1">{survey.description}</p>
               </div>
-              <svg className="w-5 h-5 text-gray-400 flex-shrink-0 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </div>
@@ -102,7 +96,7 @@ function SelectContent() {
         ))}
       </div>
 
-      <p className="text-center text-xs text-gray-400">
+      <p className="text-center text-base text-gray-600">
         각 설문은 독립적으로 저장됩니다. 필요한 설문을 모두 완료해 주세요.
       </p>
     </div>
