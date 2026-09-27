@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
@@ -36,9 +36,36 @@ function SelectContent() {
   const router = useRouter();
   const code = searchParams.get("code") ?? "";
   const [loadingType, setLoadingType] = useState<string | null>(null);
+  // Most recent unfinished PRO-CTCAE session for this patient, if any —
+  // re-entering the survey continues it instead of starting a blank one.
+  const [resumeSessionId, setResumeSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!code) return;
+    let cancelled = false;
+    supabase
+      .from("survey_sessions")
+      .select("id")
+      .eq("patient_code", code)
+      .eq("survey_type", "pro_ctcae")
+      .eq("is_complete", false)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled) setResumeSessionId(data?.id ?? null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
 
   async function handleSelect(survey: (typeof SURVEYS)[number]) {
     if (!code) return;
+    if (survey.type === "pro_ctcae" && resumeSessionId) {
+      router.push(`${survey.route}?session=${resumeSessionId}`);
+      return;
+    }
     setLoadingType(survey.type);
     try {
       const { data, error } = await supabase
@@ -85,6 +112,11 @@ function SelectContent() {
                     <span className="text-sm text-primary-700 animate-pulse">로딩 중...</span>
                   )}
                 </div>
+                {survey.type === "pro_ctcae" && resumeSessionId && (
+                  <p className="mt-1 inline-block px-2 py-0.5 rounded bg-amber-100 text-amber-900 text-base font-semibold">
+                    작성 중인 설문이 있어요 · 이어서 하기
+                  </p>
+                )}
                 <p className="text-base text-gray-700 mt-0.5">{survey.subtitle}</p>
                 <p className="text-base text-gray-600 mt-1">{survey.description}</p>
               </div>

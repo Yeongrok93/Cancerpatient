@@ -28,14 +28,30 @@ function isUnanswered(val: unknown) {
   return val === undefined || val === null;
 }
 
+type SaveRow = { item_id: number; question_key: string; value: number | boolean };
+
+async function postAnswers(sessionId: string, rows: SaveRow[]) {
+  if (rows.length === 0) return;
+  const res = await fetch("/api/survey/answers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sessionId, rows }),
+  });
+  if (!res.ok) throw new Error(`save failed (${res.status})`);
+}
+
 function SurveyContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const sessionId = searchParams.get("session");
 
   const [answers, setAnswers] = useState<AnswerMap>({});
+  const [loaded, setLoaded] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [resumed, setResumed] = useState(false);
   const [categoryIdx, setCategoryIdx] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorItemIds, setErrorItemIds] = useState<Set<number>>(new Set());
   const [additionalComment, setAdditionalComment] = useState("");
@@ -47,8 +63,54 @@ function SurveyContent() {
   const currentCategory = CATEGORIES[categoryIdx];
   const currentItems = getItemsByCategory(currentCategory);
 
+  // Load whatever was already saved for this session so a patient who left
+  // mid-survey picks up where they stopped.
   useEffect(() => {
-    if (!sessionId) router.replace("/");
+    if (!sessionId) {
+      router.replace("/");
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const [sessionRes, answersRes] = await Promise.all([
+        supabase.from("survey_sessions").select("is_complete").eq("id", sessionId).maybeSingle(),
+        supabase
+          .from("survey_answers")
+          .select("item_id, question_key, question_type, answer_value, answer_boolean")
+          .eq("session_id", sessionId),
+      ]).catch((err) => {
+        console.error(err);
+        return [null, null] as const;
+      });
+      if (cancelled) return;
+      if (!sessionRes || !answersRes || sessionRes.error || answersRes.error) {
+        setLoadFailed(true);
+        return;
+      }
+      const session = sessionRes.data;
+      const rows = answersRes.data;
+      if (session?.is_complete) {
+        router.replace(`/survey/complete?session=${sessionId}`);
+        return;
+      }
+      const map: AnswerMap = {};
+      (rows ?? []).forEach((r) => {
+        map[buildAnswerKey(r.item_id, r.question_key)] =
+          r.question_type === "presence" ? r.answer_boolean : r.answer_value;
+      });
+      const firstOpen = CATEGORIES.findIndex((cat) =>
+        getItemsByCategory(cat).some((item) =>
+          item.questions.some((q) => isUnanswered(map[buildAnswerKey(item.id, q.key)]))
+        )
+      );
+      setAnswers(map);
+      setCategoryIdx(firstOpen === -1 ? CATEGORIES.length - 1 : firstOpen);
+      setResumed(Object.keys(map).length > 0);
+      setLoaded(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [sessionId, router]);
 
   // Reset errors when category changes
@@ -63,9 +125,23 @@ function SurveyContent() {
     }
   }, [errorItemIds]);
 
+  // Every tap is saved right away (not just on "다음"), so leaving the page
+  // at any point loses nothing. A failure only shows a notice here — the
+  // category save on "다음"/"제출" retries and blocks if it still fails.
+  function saveInBackground(rows: SaveRow[]) {
+    if (!sessionId) return;
+    postAnswers(sessionId, rows)
+      .then(() => setSaveFailed(false))
+      .catch((err) => {
+        console.error(err);
+        setSaveFailed(true);
+      });
+  }
+
   function handleAnswer(itemId: number, qKey: string, value: number | boolean) {
     const key = buildAnswerKey(itemId, qKey);
     setAnswers((prev) => ({ ...prev, [key]: value }));
+    saveInBackground([{ item_id: itemId, question_key: qKey, value }]);
     // Clear error for this item if all its questions are now answered
     setErrorItemIds((prev) => {
       const item = SURVEY_ITEMS.find((i) => i.id === itemId);
@@ -106,7 +182,14 @@ function SurveyContent() {
       });
       return next;
     });
-    if (checked) setErrorItemIds(new Set());
+    if (checked) {
+      setErrorItemIds(new Set());
+      saveInBackground(
+        currentItems.flatMap((item) =>
+          item.questions.map((q) => ({ item_id: item.id, question_key: q.key, value: noSymptomValue(q.type) }))
+        )
+      );
+    }
   }
 
   function getUnansweredItems(items: SurveyItem[]) {
@@ -119,26 +202,14 @@ function SurveyContent() {
     if (!sessionId) return;
     setSaving(true);
     try {
-      const rows = currentItems.flatMap((item) =>
-        item.questions.map((q) => {
+      const rows: SaveRow[] = currentItems.flatMap((item) =>
+        item.questions.flatMap((q) => {
           const val = answers[buildAnswerKey(item.id, q.key)];
-          return {
-            session_id: sessionId,
-            item_id: item.id,
-            item_term_en: item.termEn,
-            question_key: q.key,
-            question_type: q.type,
-            answer_value: q.type !== "presence" && !isUnanswered(val) ? (val as number) : null,
-            answer_boolean: q.type === "presence" && !isUnanswered(val) ? (val as boolean) : null,
-          };
+          return isUnanswered(val) ? [] : [{ item_id: item.id, question_key: q.key, value: val as number | boolean }];
         })
-      ).filter((r) => r.answer_value !== null || r.answer_boolean !== null);
-
-      if (rows.length > 0) {
-        await supabase
-          .from("survey_answers")
-          .upsert(rows, { onConflict: "session_id,item_id,question_key" });
-      }
+      );
+      await postAnswers(sessionId, rows);
+      setSaveFailed(false);
     } finally {
       setSaving(false);
     }
@@ -153,13 +224,22 @@ function SurveyContent() {
       return;
     }
     setErrorItemIds(new Set());
-    await saveCurrentCategory();
+    try {
+      await saveCurrentCategory();
+    } catch (err) {
+      console.error(err);
+      setSaveFailed(true);
+      alert("답변 저장에 실패했습니다. 인터넷 연결을 확인하고 다시 눌러 주세요.");
+      return;
+    }
     setCategoryIdx((i) => i + 1);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function handlePrev() {
-    await saveCurrentCategory();
+    // Going back shouldn't be blocked by a save error; every answer was
+    // already sent individually, and "다음" will retry this category.
+    await saveCurrentCategory().catch(() => setSaveFailed(true));
     setCategoryIdx((i) => i - 1);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -172,10 +252,17 @@ function SurveyContent() {
       setErrorItemIds(ids);
       return;
     }
+    const firstOpen = CATEGORIES.findIndex((cat) => getUnansweredItems(getItemsByCategory(cat)).length > 0);
+    if (firstOpen !== -1) {
+      alert(`'${CATEGORIES[firstOpen]}' 영역에 답하지 않은 문항이 있어요. 해당 영역으로 이동합니다.`);
+      setCategoryIdx(firstOpen);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     setSubmitting(true);
     try {
       await saveCurrentCategory();
-      await supabase
+      const { error } = await supabase
         .from("survey_sessions")
         .update({
           is_complete: true,
@@ -183,6 +270,7 @@ function SurveyContent() {
           additional_comments: additionalComment.trim() || null,
         })
         .eq("id", sessionId);
+      if (error) throw error;
       router.push(`/survey/complete?session=${sessionId}`);
     } catch (err) {
       console.error(err);
@@ -196,8 +284,38 @@ function SurveyContent() {
 
   let firstErrorSet = false;
 
+  if (!sessionId) return null;
+  if (loadFailed) {
+    return (
+      <div className="text-center py-20 space-y-4">
+        <p className="text-lg text-gray-800">설문을 불러오지 못했어요. 인터넷 연결을 확인해 주세요.</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="min-h-[56px] px-6 rounded-xl bg-primary-600 text-white text-lg font-bold"
+        >
+          다시 시도
+        </button>
+      </div>
+    );
+  }
+  if (!loaded) {
+    return <p className="text-center text-lg text-gray-600 py-20">설문을 불러오는 중...</p>;
+  }
+
   return (
     <div className="space-y-6">
+      {resumed && (
+        <div className="bg-primary-50 border-2 border-primary-200 rounded-xl px-4 py-3 text-base text-primary-900">
+          이전에 답하신 내용을 불러왔어요. 이어서 진행해 주세요.
+        </div>
+      )}
+
+      {saveFailed && (
+        <div className="bg-red-50 border-2 border-red-300 rounded-xl px-4 py-3 text-base text-red-800">
+          ⚠ 답변이 저장되지 않았어요. 인터넷 연결을 확인해 주세요.
+        </div>
+      )}
+
       {/* Progress */}
       <div className="card space-y-3">
         <ProgressBar current={answeredCount} total={totalQuestions} />
@@ -210,6 +328,9 @@ function SurveyContent() {
           </div>
           {saving && <span className="text-sm text-primary-700 animate-pulse">저장 중…</span>}
         </div>
+        <p className="text-base text-gray-700">
+          답변은 누르실 때마다 자동 저장됩니다. 중간에 나가셔도 다시 들어오시면 이어서 하실 수 있어요.
+        </p>
         <div className="hidden sm:flex gap-1.5 flex-wrap">
           {CATEGORIES.map((cat, i) => {
             const items = getItemsByCategory(cat);
