@@ -22,6 +22,9 @@ CREATE TABLE IF NOT EXISTS participants (
   sms_error       TEXT
 );
 
+-- 연구참여시작 날짜 (added after initial schema; safe to re-run)
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS study_start_date DATE;
+
 CREATE INDEX IF NOT EXISTS idx_participants_applied ON participants (applied_at DESC);
 CREATE INDEX IF NOT EXISTS idx_participants_code    ON participants (patient_code);
 
