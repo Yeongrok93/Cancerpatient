@@ -29,6 +29,12 @@ function weekStart(date: string): number {
 
 export type QlqWindow = { from: string; to: string };
 
+/** The Mon–Sun week containing `date`. */
+export function weekRange(date: string): QlqWindow {
+  const from = weekStart(date);
+  return { from: fromUtc(from), to: fromUtc(from + 6 * DAY_MS) };
+}
+
 /** The Mon–Sun week that contains the k-th 12-week mark after `start`. */
 export function qlqWindow(start: string, k: number): QlqWindow {
   const mark = fromUtc(toUtc(start) + k * QLQ_INTERVAL_WEEKS * 7 * DAY_MS);

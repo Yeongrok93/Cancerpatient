@@ -12,7 +12,7 @@ import { QLQ_QUESTIONS } from "./qlq-c30";
 import { sendSms } from "./solapi";
 import { headers } from "next/headers";
 import { clientIp, rateLimit } from "./rateLimit";
-import { formatMonthDay, kstToday, qlqStatus } from "./surveySchedule";
+import { formatMonthDay, kstToday, qlqStatus, weekRange } from "./surveySchedule";
 
 function addDays(date: string, days: number): string {
   const [y, m, d] = date.split("-").map(Number);
@@ -125,7 +125,7 @@ export type SurveyAvailability = {
 /**
  * Which surveys this patient can start right now.
  *  - w0 (기본정보): once. Locked after it has been submitted.
- *  - pro_ctcae (증상): always open.
+ *  - pro_ctcae (증상): once per Mon–Sun week; the next week opens a new one.
  *  - qlq_c30 (삶의 질): only in the Mon–Sun week containing each 12-week mark
  *    after the participant's start date, and once per window.
  */
@@ -142,6 +142,21 @@ export async function getSurveyAvailability(code: string): Promise<Record<Survey
   `;
   if (w0Done) {
     result.w0 = { open: false, label: "완료", note: "기본정보는 한 번만 입력하며, 이미 제출하셨어요." };
+  }
+
+  const thisWeek = weekRange(kstToday());
+  const [proDoneThisWeek] = await sql`
+    SELECT 1 FROM survey_sessions
+    WHERE patient_code = ${code} AND survey_type = 'pro_ctcae' AND is_complete = TRUE
+      AND (completed_at AT TIME ZONE 'Asia/Seoul')::date BETWEEN ${thisWeek.from}::date AND ${thisWeek.to}::date
+    LIMIT 1
+  `;
+  if (proDoneThisWeek) {
+    result.pro_ctcae = {
+      open: false,
+      label: "완료",
+      note: `이번 주 증상 설문을 완료하셨어요. ${formatMonthDay(addDays(thisWeek.to, 1))}(월)에 새 설문이 열립니다.`,
+    };
   }
 
   const [p] = await sql`
