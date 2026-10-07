@@ -38,9 +38,11 @@ npm run dev
 | 이름 | 용도 |
 |---|---|
 | `DATABASE_URL` | Neon 접속 (Vercel Neon 연동이 자동 등록) |
+| `ADMIN_USERNAME` | `/admin` 로그인 아이디 (기본값 `admin`) |
 | `ADMIN_PASSWORD` | `/admin` 로그인 비밀번호 |
 | `SOLAPI_API`, `SOLAPI_SECRET` | 참여신청 문자 알림 |
-| `SMS_NOTIFY_TO` | (선택) 알림 수신번호 덮어쓰기, 쉼표 구분 |
+| `SMS_SENDER` | 솔라피에 등록된 발신번호 |
+| `SMS_NOTIFY_TO` | 알림 수신번호, 쉼표 구분 |
 
 ## 배포
 

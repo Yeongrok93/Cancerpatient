@@ -10,20 +10,31 @@ import { sql, isUuid } from "./db";
 import { SURVEY_ITEMS } from "./questions";
 import { QLQ_QUESTIONS } from "./qlq-c30";
 import { sendSms } from "./solapi";
+import { headers } from "next/headers";
+import { clientIp, rateLimit } from "./rateLimit";
 
 type SurveyType = "pro_ctcae" | "qlq_c30" | "w0";
 
-const SMS_SENDER = "01035024598";
-// Comma-separated override (e.g. to text only one phone while testing).
-const SMS_RECIPIENTS = process.env.SMS_NOTIFY_TO
-  ? process.env.SMS_NOTIFY_TO.split(",").map((n) => n.trim()).filter(Boolean)
-  : ["01035024598", "01040188781"];
+// Phone numbers live in env vars (SMS_SENDER = registered Solapi sender,
+// SMS_NOTIFY_TO = comma-separated recipients), not in the public repo.
+function smsConfig(): { sender: string; recipients: string[] } {
+  const sender = (process.env.SMS_SENDER ?? "").trim();
+  const recipients = (process.env.SMS_NOTIFY_TO ?? "").split(",").map((n) => n.trim()).filter(Boolean);
+  if (!sender || recipients.length === 0) throw new Error("SMS_SENDER / SMS_NOTIFY_TO 환경변수가 설정되지 않았습니다.");
+  return { sender, recipients };
+}
+
+async function callerIp(): Promise<string> {
+  return clientIp(await headers());
+}
 
 // ── 본인확인 / 참여신청 ─────────────────────────────────────────────
 
 /** Exact name + birth-date match → that participant's code, never any other column. */
 export async function findPatientCode(name: string, birth: string): Promise<string | null> {
   if (typeof name !== "string" || typeof birth !== "string" || !name.trim() || !birth.trim()) return null;
+  // Slows guessing name/birth-date pairs: 15 lookups per 10 minutes per IP.
+  if (!rateLimit(`find-code:${await callerIp()}`, 15, 10 * 60 * 1000)) return null;
   const rows = await sql`
     SELECT patient_code FROM participants
     WHERE trim(name) = trim(${name})
@@ -54,6 +65,9 @@ export async function registerParticipant(input: {
   if (!name || !recordOrBirth || !contact || researchTypes.length === 0) {
     return { ok: false, error: "필수 항목이 비어 있습니다." };
   }
+  if (!rateLimit(`register:${await callerIp()}`, 5, 60 * 60 * 1000)) {
+    return { ok: false, error: "신청 횟수가 너무 많습니다. 잠시 후 다시 시도해 주세요." };
+  }
 
   const [row] = await sql`
     INSERT INTO participants (name, record_or_birth, contact, research_types, consent_agreed)
@@ -69,7 +83,8 @@ export async function registerParticipant(input: {
   // packs everything into one slash-separated line.
   const text = `[연구참여신청] ${[name, recordOrBirth, researchTypes.join(","), contact].join("/")}`;
   try {
-    await sendSms({ to: SMS_RECIPIENTS, from: SMS_SENDER, text });
+    const { sender, recipients } = smsConfig();
+    await sendSms({ to: recipients, from: sender, text });
     await sql`UPDATE participants SET sms_notified = TRUE, sms_error = NULL WHERE id = ${row.id}`;
   } catch (err) {
     console.error("Failed to send registration SMS:", err);

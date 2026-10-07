@@ -8,6 +8,7 @@ function LoginContent() {
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/admin";
 
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -20,7 +21,7 @@ function LoginContent() {
       const res = await fetch("/api/admin-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -44,9 +45,19 @@ function LoginContent() {
       >
         <h1 className="text-xl font-bold text-gray-900 text-center">관리자 로그인</h1>
         <input
-          type="password"
+          type="text"
           required
           autoFocus
+          autoComplete="username"
+          placeholder="아이디"
+          value={username}
+          onChange={(e) => { setUsername(e.target.value); setError(""); }}
+          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        />
+        <input
+          type="password"
+          required
+          autoComplete="current-password"
           placeholder="비밀번호"
           value={password}
           onChange={(e) => { setPassword(e.target.value); setError(""); }}
@@ -55,7 +66,7 @@ function LoginContent() {
         {error && <p className="text-xs text-red-500">{error}</p>}
         <button
           type="submit"
-          disabled={submitting || !password}
+          disabled={submitting || !username || !password}
           className="w-full py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold rounded-xl transition-colors"
         >
           {submitting ? "확인 중..." : "로그인"}
