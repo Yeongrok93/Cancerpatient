@@ -12,6 +12,12 @@ import { QLQ_QUESTIONS } from "./qlq-c30";
 import { sendSms } from "./solapi";
 import { headers } from "next/headers";
 import { clientIp, rateLimit } from "./rateLimit";
+import { formatMonthDay, kstToday, qlqStatus } from "./surveySchedule";
+
+function addDays(date: string, days: number): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d) + days * 86_400_000).toISOString().slice(0, 10);
+}
 
 type SurveyType = "pro_ctcae" | "qlq_c30" | "w0";
 
@@ -108,7 +114,74 @@ export async function getResumableProCtcaeSession(code: string): Promise<string 
   return rows[0]?.id ?? null;
 }
 
-/** Starts a survey — or, for PRO-CTCAE, continues the patient's unfinished one. */
+export type SurveyAvailability = {
+  open: boolean;
+  /** Short badge text, e.g. "완료". */
+  label?: string;
+  /** Sentence shown under the survey title. */
+  note?: string;
+};
+
+/**
+ * Which surveys this patient can start right now.
+ *  - w0 (기본정보): once. Locked after it has been submitted.
+ *  - pro_ctcae (증상): always open.
+ *  - qlq_c30 (삶의 질): only in the Mon–Sun week containing each 12-week mark
+ *    after the participant's start date, and once per window.
+ */
+export async function getSurveyAvailability(code: string): Promise<Record<SurveyType, SurveyAvailability>> {
+  const result: Record<SurveyType, SurveyAvailability> = {
+    w0: { open: true },
+    pro_ctcae: { open: true },
+    qlq_c30: { open: false, label: "대기", note: "삶의 질 설문은 연구 시작 후 12주마다 열립니다." },
+  };
+  if (typeof code !== "string" || !code.trim()) return result;
+
+  const [w0Done] = await sql`
+    SELECT 1 FROM survey_sessions WHERE patient_code = ${code} AND survey_type = 'w0' AND is_complete = TRUE LIMIT 1
+  `;
+  if (w0Done) {
+    result.w0 = { open: false, label: "완료", note: "기본정보는 한 번만 입력하며, 이미 제출하셨어요." };
+  }
+
+  const [p] = await sql`
+    SELECT study_start_date::text AS start FROM participants WHERE patient_code = ${code} ORDER BY applied_at LIMIT 1
+  `;
+  const start: string | null = p?.start ?? null;
+  if (!start) {
+    result.qlq_c30 = { open: false, label: "대기", note: "첫 설문을 시작하신 뒤 12주째 주에 열립니다." };
+    return result;
+  }
+
+  const { current, next } = qlqStatus(start, kstToday());
+  if (!current) {
+    result.qlq_c30 = {
+      open: false,
+      label: "대기",
+      note: `다음 작성 기간: ${formatMonthDay(next.from)} ~ ${formatMonthDay(next.to)}`,
+    };
+    return result;
+  }
+  const [doneInWindow] = await sql`
+    SELECT 1 FROM survey_sessions
+    WHERE patient_code = ${code} AND survey_type = 'qlq_c30' AND is_complete = TRUE
+      AND (completed_at AT TIME ZONE 'Asia/Seoul')::date BETWEEN ${current.from}::date AND ${current.to}::date
+    LIMIT 1
+  `;
+  if (doneInWindow) {
+    const after = qlqStatus(start, addDays(current.to, 1)).next;
+    result.qlq_c30 = {
+      open: false,
+      label: "완료",
+      note: `이번 분기 설문을 완료하셨어요. 다음: ${formatMonthDay(after.from)} ~ ${formatMonthDay(after.to)}`,
+    };
+  } else {
+    result.qlq_c30 = { open: true, note: `${formatMonthDay(current.to)}까지 작성할 수 있어요.` };
+  }
+  return result;
+}
+
+/** Starts a survey — or continues the patient's unfinished one of the same type. */
 export async function startSurveySession(
   code: string,
   surveyType: SurveyType
@@ -116,10 +189,22 @@ export async function startSurveySession(
   if (!["pro_ctcae", "qlq_c30", "w0"].includes(surveyType)) return { ok: false, error: "invalid survey type" };
   if (!(await patientExists(code))) return { ok: false, error: "unknown patient" };
 
-  if (surveyType === "pro_ctcae") {
-    const existing = await getResumableProCtcaeSession(code);
-    if (existing) return { ok: true, sessionId: existing };
-  }
+  const availability = (await getSurveyAvailability(code))[surveyType];
+  if (!availability.open) return { ok: false, error: availability.note ?? "지금은 작성할 수 없는 설문입니다." };
+
+  // The first survey a participant starts fixes their study start date; the
+  // quarterly 삶의 질 windows count from it.
+  await sql`
+    UPDATE participants SET study_start_date = ${kstToday()}::date
+    WHERE patient_code = ${code} AND study_start_date IS NULL
+  `;
+
+  const [unfinished] = await sql`
+    SELECT id FROM survey_sessions
+    WHERE patient_code = ${code} AND survey_type = ${surveyType} AND is_complete = FALSE
+    ORDER BY started_at DESC LIMIT 1
+  `;
+  if (unfinished) return { ok: true, sessionId: unfinished.id };
   const [row] = await sql`
     INSERT INTO survey_sessions (patient_code, survey_type) VALUES (${code}, ${surveyType}) RETURNING id
   `;

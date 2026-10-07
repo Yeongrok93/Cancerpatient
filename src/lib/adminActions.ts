@@ -46,6 +46,8 @@ export type AdminParticipant = {
   patient_code: string | null;
   sms_notified: boolean | null;
   sms_error: string | null;
+  study_start_date: string | null;
+  access_token: string | null;
 };
 
 export type AdminMessage = {
@@ -78,7 +80,11 @@ export async function adminGetSessionAnswers(sessionId: string): Promise<AdminAn
 
 export async function adminListParticipants(): Promise<AdminParticipant[]> {
   await requireAdmin();
-  const rows = await sql`SELECT * FROM participants ORDER BY applied_at DESC LIMIT 200`;
+  const rows = await sql`
+    SELECT id, name, record_or_birth, contact, research_types, consent_agreed, applied_at,
+           patient_code, sms_notified, sms_error, study_start_date::text AS study_start_date, access_token
+    FROM participants ORDER BY applied_at DESC LIMIT 200
+  `;
   return serialize(rows) as AdminParticipant[];
 }
 
@@ -87,6 +93,16 @@ export async function adminAssignPatientCode(id: string, patientCode: string): P
   const code = String(patientCode ?? "").trim();
   if (!isUuid(id) || !code || code.length > 32) return { ok: false };
   await sql`UPDATE participants SET patient_code = ${code} WHERE id = ${id}`;
+  return { ok: true };
+}
+
+/** 연구참여시작일 (YYYY-MM-DD). The 12-week 삶의 질 windows count from it. Empty clears it. */
+export async function adminSetStudyStartDate(id: string, date: string): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const value = String(date ?? "").trim();
+  if (!isUuid(id) || (value !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(value))) return { ok: false };
+  if (value === "") await sql`UPDATE participants SET study_start_date = NULL WHERE id = ${id}`;
+  else await sql`UPDATE participants SET study_start_date = ${value}::date WHERE id = ${id}`;
   return { ok: true };
 }
 

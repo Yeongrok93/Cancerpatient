@@ -25,6 +25,11 @@ CREATE TABLE IF NOT EXISTS participants (
 -- 연구참여시작 날짜 (added after initial schema; safe to re-run)
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS study_start_date DATE;
 
+-- Per-patient survey link token (/s/<token>/<w0|pro|qlq>): 64 hex chars of randomness.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS access_token TEXT
+  DEFAULT (replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_participants_token ON participants (access_token);
+
 CREATE INDEX IF NOT EXISTS idx_participants_applied ON participants (applied_at DESC);
 CREATE INDEX IF NOT EXISTS idx_participants_code    ON participants (patient_code);
 

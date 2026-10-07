@@ -6,6 +6,7 @@ import {
   adminListSessions,
   adminGetSessionAnswers,
   adminListParticipants,
+  adminSetStudyStartDate,
   adminAssignPatientCode,
   adminListMessages,
   adminUnreadMessageCount,
@@ -65,6 +66,7 @@ export default function AdminPage() {
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [assignCode, setAssignCode] = useState("");
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [messages, setMessages] = useState<PatientMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -135,6 +137,26 @@ export default function AdminPage() {
     setParticipants((prev) => prev.map((p) => (p.id === id ? { ...p, patient_code: code.trim() } : p)));
     setAssigningId(null);
     setAssignCode("");
+  }
+
+  async function saveStartDate(id: string, date: string) {
+    const res = await adminSetStudyStartDate(id, date).catch(() => ({ ok: false }));
+    if (!res.ok) {
+      alert("연구참여시작일 저장에 실패했습니다.");
+      return;
+    }
+    setParticipants((prev) => prev.map((p) => (p.id === id ? { ...p, study_start_date: date || null } : p)));
+  }
+
+  async function copyLink(token: string, kind: "w0" | "pro" | "qlq", key: string) {
+    const url = `${window.location.origin}/s/${token}/${kind}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      window.prompt("링크를 복사하세요", url);
+    }
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
   }
 
   async function viewAnswers(sessionId: string) {
@@ -423,6 +445,8 @@ export default function AdminPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">신청일</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">문자알림</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">참여자번호</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연구참여시작</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">설문 링크 복사</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -497,6 +521,31 @@ export default function AdminPage() {
                           >
                             번호 배정
                           </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="date"
+                          value={p.study_start_date ?? ""}
+                          onChange={(e) => saveStartDate(p.id, e.target.value)}
+                          className="px-2 py-1 border border-gray-300 rounded text-xs"
+                        />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {p.patient_code && p.access_token ? (
+                          <div className="flex items-center gap-1.5">
+                            {([["w0", "기본정보"], ["pro", "증상"], ["qlq", "삶의질"]] as const).map(([k, label]) => (
+                              <button
+                                key={k}
+                                onClick={() => copyLink(p.access_token!, k, `${p.id}-${k}`)}
+                                className="text-xs px-2 py-1 border border-gray-300 rounded hover:bg-gray-50"
+                              >
+                                {copiedKey === `${p.id}-${k}` ? "복사됨 ✓" : label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">번호 배정 후 생성</span>
                         )}
                       </td>
                     </tr>
