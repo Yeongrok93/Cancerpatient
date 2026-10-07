@@ -12,7 +12,10 @@ import { QLQ_QUESTIONS } from "./qlq-c30";
 import { sendSms } from "./solapi";
 import { headers } from "next/headers";
 import { clientIp, rateLimit } from "./rateLimit";
-import { formatMonthDay, kstToday, qlqStatus, weekRange } from "./surveySchedule";
+import { formatMonthDay, kstToday, qlqStatus } from "./surveySchedule";
+
+/** 증상 설문 reopens this many days after the previous one was completed. */
+const PRO_REOPEN_AFTER_DAYS = 6;
 
 function addDays(date: string, days: number): string {
   const [y, m, d] = date.split("-").map(Number);
@@ -125,7 +128,7 @@ export type SurveyAvailability = {
 /**
  * Which surveys this patient can start right now.
  *  - w0 (기본정보): once. Locked after it has been submitted.
- *  - pro_ctcae (증상): once per Mon–Sun week; the next week opens a new one.
+ *  - pro_ctcae (증상): free the first time, then 6 days after the last completion.
  *  - qlq_c30 (삶의 질): only in the Mon–Sun week containing each 12-week mark
  *    after the participant's start date, and once per window.
  */
@@ -144,19 +147,22 @@ export async function getSurveyAvailability(code: string): Promise<Record<Survey
     result.w0 = { open: false, label: "완료", note: "기본정보는 한 번만 입력하며, 이미 제출하셨어요." };
   }
 
-  const thisWeek = weekRange(kstToday());
-  const [proDoneThisWeek] = await sql`
-    SELECT 1 FROM survey_sessions
+  // 증상: first one is free; after that it reopens 6 days after the last completion
+  // (6 rather than 7 so a patient who answers a day early isn't locked out).
+  const [lastPro] = await sql`
+    SELECT (max(completed_at) AT TIME ZONE 'Asia/Seoul')::date::text AS last
+    FROM survey_sessions
     WHERE patient_code = ${code} AND survey_type = 'pro_ctcae' AND is_complete = TRUE
-      AND (completed_at AT TIME ZONE 'Asia/Seoul')::date BETWEEN ${thisWeek.from}::date AND ${thisWeek.to}::date
-    LIMIT 1
   `;
-  if (proDoneThisWeek) {
-    result.pro_ctcae = {
-      open: false,
-      label: "완료",
-      note: `이번 주 증상 설문을 완료하셨어요. ${formatMonthDay(addDays(thisWeek.to, 1))}(월)에 새 설문이 열립니다.`,
-    };
+  if (lastPro?.last) {
+    const reopen = addDays(lastPro.last, PRO_REOPEN_AFTER_DAYS);
+    if (kstToday() < reopen) {
+      result.pro_ctcae = {
+        open: false,
+        label: "완료",
+        note: `최근 증상 설문을 ${formatMonthDay(lastPro.last)}에 완료하셨어요. ${formatMonthDay(reopen)}부터 다시 작성할 수 있어요.`,
+      };
+    }
   }
 
   const [p] = await sql`
