@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminRequest } from "@/lib/adminAuth";
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   if (req.nextUrl.pathname === "/admin/login") return NextResponse.next();
 
   if (!(await isAdminRequest(req))) {
