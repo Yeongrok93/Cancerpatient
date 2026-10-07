@@ -5,6 +5,16 @@ export interface W0RadioQuestion {
   options: { value: number; label: string }[];
 }
 
+export interface W0MultiQuestion {
+  key: string;
+  label: string;
+  type: "multi"; // checkboxes; stored as comma-separated option values, e.g. "2,3"
+  hint?: string;
+  /** Option value that cannot be combined with any other (e.g. "혼자"). */
+  exclusiveValue?: number;
+  options: { value: number; label: string }[];
+}
+
 export interface W0NumberQuestion {
   key: string;
   label: string;
@@ -20,7 +30,7 @@ export interface W0DurationQuestion {
   type: "duration"; // hours + minutes
 }
 
-export type W0Question = W0RadioQuestion | W0NumberQuestion | W0DurationQuestion;
+export type W0Question = W0RadioQuestion | W0MultiQuestion | W0NumberQuestion | W0DurationQuestion;
 
 // Part I — Demographics
 export const DEMOGRAPHICS: W0Question[] = [
@@ -48,7 +58,9 @@ export const DEMOGRAPHICS: W0Question[] = [
     ],
   },
   {
-    key: "living", label: "동거형태", type: "radio",
+    key: "living", label: "동거형태", type: "multi",
+    hint: "함께 사는 분을 모두 선택해 주세요.",
+    exclusiveValue: 1,
     options: [
       { value: 1, label: "혼자" },
       { value: 2, label: "배우자와 함께" },

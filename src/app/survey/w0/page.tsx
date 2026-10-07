@@ -20,6 +20,16 @@ function isUnanswered(val: number | string | undefined) {
   return val === undefined || val === "";
 }
 
+function parseMulti(val: number | string | undefined): number[] {
+  if (val === undefined || val === "") return [];
+  return String(val).split(",").map(Number).filter((n) => !isNaN(n));
+}
+
+/** A duration is answered when hours or minutes is filled; the blank one counts as 0. */
+function durationAnswered(answers: AnswerMap, hoursKey: string, minutesKey: string) {
+  return !isUnanswered(answers[hoursKey]) || !isUnanswered(answers[minutesKey]);
+}
+
 function W0Content() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -38,6 +48,20 @@ function W0Content() {
     setErrorKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
   }
 
+  function toggleMulti(q: { key: string; exclusiveValue?: number }, value: number) {
+    const cur = parseMulti(answers[q.key]);
+    let next: number[];
+    if (cur.includes(value)) {
+      next = cur.filter((v) => v !== value);
+    } else if (value === q.exclusiveValue) {
+      next = [value];
+    } else {
+      next = [...cur.filter((v) => v !== q.exclusiveValue), value];
+    }
+    next.sort((a, b) => a - b);
+    setAnswer(q.key, next.join(","));
+  }
+
   function getRequiredKeys(): string[] {
     const keys: string[] = [];
     // Demographics — all required
@@ -48,12 +72,14 @@ function W0Content() {
     IPAQ_ITEMS.forEach((item) => {
       keys.push(item.daysKey);
       const days = Number(answers[item.daysKey]);
-      if (days > 0) {
-        keys.push(item.hoursKey, item.minutesKey);
+      if (days > 0 && !durationAnswered(answers, item.hoursKey, item.minutesKey)) {
+        keys.push(item.hoursKey);
       }
     });
-    // Sitting always required
-    keys.push(SITTING_KEYS.hours, SITTING_KEYS.minutes);
+    // Sitting always required (hours or minutes; the blank one counts as 0)
+    if (!durationAnswered(answers, SITTING_KEYS.hours, SITTING_KEYS.minutes)) {
+      keys.push(SITTING_KEYS.hours);
+    }
     // Emergency screening — all required
     EMERGENCY_SCREENING.forEach((q) => keys.push(q.key));
     return keys;
@@ -75,7 +101,19 @@ function W0Content() {
     setSubmitting(true);
     try {
       // Store everything as answer_number when parseable, else answer_text
-      const cleanRows = Object.entries(answers).map(([key, val]) => {
+      const filled: AnswerMap = { ...answers };
+      // A blank hours/minutes box next to a filled one means 0.
+      const durationPairs: [string, string][] = [
+        ...IPAQ_ITEMS.filter((i) => Number(answers[i.daysKey]) > 0).map((i) => [i.hoursKey, i.minutesKey] as [string, string]),
+        [SITTING_KEYS.hours, SITTING_KEYS.minutes],
+      ];
+      for (const [h, m] of durationPairs) {
+        if (isUnanswered(filled[h])) filled[h] = 0;
+        if (isUnanswered(filled[m])) filled[m] = 0;
+      }
+      const multiKeys = new Set(DEMOGRAPHICS.filter((q) => q.type === "multi").map((q) => q.key));
+      const cleanRows = Object.entries(filled).map(([key, val]) => {
+        if (multiKeys.has(key)) return { question_key: key, answer_number: null, answer_text: String(val) };
         const n = Number(val);
         return {
           question_key: key,
@@ -151,6 +189,34 @@ function W0Content() {
                     placeholder="숫자 입력"
                   />
                   {q.unit && <span className="text-lg text-gray-700">{q.unit}</span>}
+                </div>
+              )}
+
+              {q.type === "multi" && (
+                <div className="space-y-2 pl-11">
+                  {q.hint && <p className="text-base text-gray-600">{q.hint} (중복 선택 가능)</p>}
+                  <div className="flex flex-wrap gap-2">
+                    {q.options.map((opt) => {
+                      const selected = parseMulti(answers[q.key]).includes(opt.value);
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          role="checkbox"
+                          aria-checked={selected}
+                          onClick={() => toggleMulti(q, opt.value)}
+                          className={`min-h-[56px] px-4 py-2 rounded-lg border-2 text-lg transition-all ${
+                            selected
+                              ? "bg-emerald-600 border-emerald-700 text-white font-bold"
+                              : "bg-white border-gray-300 text-gray-800 hover:border-emerald-400"
+                          }`}
+                        >
+                          <span aria-hidden>{selected ? "☑ " : "☐ "}</span>
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
@@ -276,7 +342,7 @@ function W0Content() {
                   <div
                     id={`field-${item.hoursKey}`}
                     className={`sm:pl-11 space-y-2 rounded-lg border-2 p-3 transition-colors ${
-                      errorKeys.has(item.hoursKey) || errorKeys.has(item.minutesKey)
+                      errorKeys.has(item.hoursKey)
                         ? "border-red-500"
                         : "border-transparent"
                     }`}
@@ -288,8 +354,8 @@ function W0Content() {
                       answers={answers}
                       setAnswer={setAnswer}
                     />
-                    {(errorKeys.has(item.hoursKey) || errorKeys.has(item.minutesKey)) && (
-                      <p className="text-base font-semibold text-red-700">⚠ 시간 또는 분을 입력해 주세요</p>
+                    {errorKeys.has(item.hoursKey) && (
+                      <p className="text-base font-semibold text-red-700">⚠ 시간이나 분 중 하나는 적어 주세요 (없는 쪽은 비워 두거나 0)</p>
                     )}
                   </div>
                 )}
@@ -302,7 +368,7 @@ function W0Content() {
             <div
               id={`field-${SITTING_KEYS.hours}`}
               className={`space-y-2 rounded-lg border-2 p-3 transition-colors ${
-                errorKeys.has(SITTING_KEYS.hours) || errorKeys.has(SITTING_KEYS.minutes)
+                errorKeys.has(SITTING_KEYS.hours)
                   ? "border-red-500"
                   : "border-transparent"
               }`}
@@ -321,8 +387,8 @@ function W0Content() {
                   setAnswer={setAnswer}
                 />
               </div>
-              {(errorKeys.has(SITTING_KEYS.hours) || errorKeys.has(SITTING_KEYS.minutes)) && (
-                <p className="text-base font-semibold text-red-700 sm:pl-11">⚠ 시간 또는 분을 입력해 주세요</p>
+              {errorKeys.has(SITTING_KEYS.hours) && (
+                <p className="text-base font-semibold text-red-700 sm:pl-11">⚠ 시간이나 분 중 하나는 적어 주세요 (없는 쪽은 비워 두거나 0)</p>
               )}
             </div>
           </div>
@@ -411,10 +477,12 @@ function DurationInput({
   setAnswer: (key: string, val: number | string) => void;
 }) {
   return (
+    <div className="space-y-1">
     <div className="flex items-center gap-3 flex-wrap">
       <div className="flex items-center gap-2">
         <input
           type="number"
+          inputMode="numeric"
           min={0}
           max={24}
           value={answers[hoursKey] ?? ""}
@@ -427,6 +495,7 @@ function DurationInput({
       <div className="flex items-center gap-2">
         <input
           type="number"
+          inputMode="numeric"
           min={0}
           max={59}
           value={answers[minutesKey] ?? ""}
@@ -436,6 +505,8 @@ function DurationInput({
         />
         <span className="text-lg text-gray-700">분</span>
       </div>
+    </div>
+    <p className="text-base text-gray-600">예) 30분이면 분 칸에만 30, 시간 칸은 비워 두셔도 돼요.</p>
     </div>
   );
 }
