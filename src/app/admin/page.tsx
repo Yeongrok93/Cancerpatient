@@ -7,6 +7,12 @@ import {
   adminGetSessionAnswers,
   adminListParticipants,
   adminSetStudyStartDate,
+  adminSetEnrolled,
+  adminListRecipients,
+  adminAddRecipient,
+  adminSetRecipientActive,
+  adminDeleteRecipient,
+  type NotifyRecipient,
   adminAssignPatientCode,
   adminListMessages,
   adminUnreadMessageCount,
@@ -56,7 +62,7 @@ type Participant = AdminParticipant;
 type PatientMessage = AdminMessage;
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<"surveys" | "participants" | "messages">("surveys");
+  const [tab, setTab] = useState<"surveys" | "participants" | "messages" | "recipients">("surveys");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -70,6 +76,10 @@ export default function AdminPage() {
   const [messages, setMessages] = useState<PatientMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [recipients, setRecipients] = useState<NotifyRecipient[]>([]);
+  const [recipientsLoading, setRecipientsLoading] = useState(false);
+  const [newRecName, setNewRecName] = useState("");
+  const [newRecPhone, setNewRecPhone] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -120,6 +130,48 @@ export default function AdminPage() {
       .catch((err) => console.error(err))
       .finally(() => setMessagesLoading(false));
   }, [tab]);
+
+  useEffect(() => {
+    if (tab !== "recipients") return;
+    setRecipientsLoading(true);
+    adminListRecipients()
+      .then(setRecipients)
+      .catch((err) => console.error(err))
+      .finally(() => setRecipientsLoading(false));
+  }, [tab]);
+
+  async function addRecipient() {
+    const res = await adminAddRecipient(newRecName, newRecPhone).catch(() => ({ ok: false as const, error: "저장에 실패했습니다." }));
+    if (!res.ok) {
+      alert(res.error);
+      return;
+    }
+    setNewRecName("");
+    setNewRecPhone("");
+    setRecipients(await adminListRecipients());
+  }
+
+  async function toggleRecipient(id: string, active: boolean) {
+    setRecipients((prev) => prev.map((r) => (r.id === id ? { ...r, active } : r)));
+    await adminSetRecipientActive(id, active);
+  }
+
+  async function removeRecipient(id: string) {
+    if (!window.confirm("이 수신자를 삭제할까요?")) return;
+    setRecipients((prev) => prev.filter((r) => r.id !== id));
+    await adminDeleteRecipient(id);
+  }
+
+  async function toggleEnrolled(id: string, enrolled: boolean) {
+    const res = await adminSetEnrolled(id, enrolled).catch(() => ({ ok: false }));
+    if (!res.ok) {
+      alert("연구참여 확인 저장에 실패했습니다.");
+      return;
+    }
+    setParticipants((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, enrolled, enrolled_at: enrolled ? new Date().toISOString() : null } : p))
+    );
+  }
 
   async function toggleMessageRead(id: string, isRead: boolean) {
     setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, is_read: isRead } : m)));
@@ -229,7 +281,7 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        {(["surveys", "participants", "messages"] as const).map((t) => (
+        {(["surveys", "participants", "messages", "recipients"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -237,7 +289,7 @@ export default function AdminPage() {
               tab === t ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            {t === "surveys" ? `설문 응답 (${sessions.length})` : t === "participants" ? "참여신청" : "환자 문의"}
+            {t === "surveys" ? `설문 응답 (${sessions.length})` : t === "participants" ? "참여신청" : t === "recipients" ? "알림 수신자" : "환자 문의"}
             {t === "messages" && unreadCount > 0 && (
               <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">
                 {unreadCount}
@@ -445,6 +497,7 @@ export default function AdminPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">신청일</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">문자알림</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">참여자번호</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" title="체크해야 자동 안내 문자 대상이 됩니다">연구참여 확인</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연구참여시작</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">설문 링크 복사</th>
                   </tr>
@@ -523,6 +576,23 @@ export default function AdminPage() {
                           </button>
                         )}
                       </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {p.patient_code ? (
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={p.enrolled}
+                              onChange={(e) => toggleEnrolled(p.id, e.target.checked)}
+                              className="w-4 h-4"
+                            />
+                            <span className={p.enrolled ? "text-green-700 font-medium" : "text-gray-400"}>
+                              {p.enrolled ? "참여 중" : "미확인"}
+                            </span>
+                          </label>
+                        ) : (
+                          <span className="text-xs text-gray-400">번호 배정 후</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <input
                           type="date"
@@ -552,6 +622,59 @@ export default function AdminPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* === 알림 수신자 탭 === */}
+      {tab === "recipients" && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-800">알림 수신자</h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              새 참여신청이 들어오면 아래 사용 중인 번호로 문자가 발송됩니다. 이 목록이 비어 있으면 환경변수(SMS_NOTIFY_TO)를 대신 사용합니다.
+            </p>
+          </div>
+          <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center gap-2">
+            <input
+              type="text"
+              value={newRecName}
+              onChange={(e) => setNewRecName(e.target.value)}
+              placeholder="이름"
+              className="w-32 px-2 py-1.5 border border-gray-300 rounded text-sm"
+            />
+            <input
+              type="tel"
+              value={newRecPhone}
+              onChange={(e) => setNewRecPhone(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addRecipient(); }}
+              placeholder="휴대폰 번호"
+              className="w-44 px-2 py-1.5 border border-gray-300 rounded text-sm"
+            />
+            <button onClick={addRecipient} className="text-sm px-3 py-1.5 bg-primary-600 text-white rounded hover:bg-primary-700">
+              추가
+            </button>
+          </div>
+          {recipientsLoading ? (
+            <div className="p-8 text-center text-gray-400">로딩 중...</div>
+          ) : recipients.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">등록된 수신자가 없습니다.</div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {recipients.map((r) => (
+                <div key={r.id} className="px-5 py-3 flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={r.active} onChange={(e) => toggleRecipient(r.id, e.target.checked)} />
+                    <span className={r.active ? "text-gray-900" : "text-gray-400"}>{r.name || "(이름 없음)"}</span>
+                  </label>
+                  <span className="font-mono text-xs text-gray-600">{r.phone}</span>
+                  <span className="text-xs text-gray-400">{r.active ? "사용 중" : "중지"}</span>
+                  <button onClick={() => removeRecipient(r.id)} className="ml-auto text-xs text-red-600 hover:underline">
+                    삭제
+                  </button>
+                </div>
+              ))}
             </div>
           )}
         </div>

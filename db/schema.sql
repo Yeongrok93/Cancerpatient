@@ -104,3 +104,19 @@ CREATE TABLE IF NOT EXISTS patient_messages (
 
 CREATE INDEX IF NOT EXISTS idx_patient_messages_code    ON patient_messages (patient_code);
 CREATE INDEX IF NOT EXISTS idx_patient_messages_created ON patient_messages (created_at DESC);
+
+-- 연구참여 확인: set by a researcher in /admin once the person has actually started
+-- the study. Registering alone never counts — automated reminders only target
+-- enrolled participants. Safe to re-run.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS enrolled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS enrolled_at TIMESTAMPTZ;
+
+-- Researchers who get the 참여신청 text message (managed in /admin 알림 수신자 tab).
+-- When no active row exists the SMS_NOTIFY_TO env var is used as a fallback.
+CREATE TABLE IF NOT EXISTS notify_recipients (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       TEXT NOT NULL DEFAULT '',
+  phone      TEXT NOT NULL UNIQUE,          -- digits only, e.g. 01012345678
+  active     BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);

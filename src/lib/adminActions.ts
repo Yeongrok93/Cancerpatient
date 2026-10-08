@@ -48,6 +48,8 @@ export type AdminParticipant = {
   sms_error: string | null;
   study_start_date: string | null;
   access_token: string | null;
+  enrolled: boolean;
+  enrolled_at: string | null;
 };
 
 export type AdminMessage = {
@@ -82,7 +84,8 @@ export async function adminListParticipants(): Promise<AdminParticipant[]> {
   await requireAdmin();
   const rows = await sql`
     SELECT id, name, record_or_birth, contact, research_types, consent_agreed, applied_at,
-           patient_code, sms_notified, sms_error, study_start_date::text AS study_start_date, access_token
+           patient_code, sms_notified, sms_error, study_start_date::text AS study_start_date, access_token,
+           enrolled, enrolled_at
     FROM participants ORDER BY applied_at DESC LIMIT 200
   `;
   return serialize(rows) as AdminParticipant[];
@@ -104,6 +107,44 @@ export async function adminSetStudyStartDate(id: string, date: string): Promise<
   if (value === "") await sql`UPDATE participants SET study_start_date = NULL WHERE id = ${id}`;
   else await sql`UPDATE participants SET study_start_date = ${value}::date WHERE id = ${id}`;
   return { ok: true };
+}
+
+/** 연구참여 확인 — only enrolled participants get automated reminders. */
+export async function adminSetEnrolled(id: string, enrolled: boolean): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  if (!isUuid(id)) return { ok: false };
+  if (enrolled) await sql`UPDATE participants SET enrolled = TRUE, enrolled_at = COALESCE(enrolled_at, NOW()) WHERE id = ${id}`;
+  else await sql`UPDATE participants SET enrolled = FALSE, enrolled_at = NULL WHERE id = ${id}`;
+  return { ok: true };
+}
+
+export type NotifyRecipient = { id: string; name: string; phone: string; active: boolean };
+
+export async function adminListRecipients(): Promise<NotifyRecipient[]> {
+  await requireAdmin();
+  const rows = await sql`SELECT id, name, phone, active FROM notify_recipients ORDER BY created_at`;
+  return rows as NotifyRecipient[];
+}
+
+export async function adminAddRecipient(name: string, phone: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const digits = String(phone ?? "").replace(/\D/g, "");
+  if (!/^01\d{8,9}$/.test(digits)) return { ok: false, error: "휴대폰 번호 형식이 올바르지 않습니다." };
+  const label = String(name ?? "").trim().slice(0, 50);
+  await sql`INSERT INTO notify_recipients (name, phone) VALUES (${label}, ${digits}) ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, active = TRUE`;
+  return { ok: true };
+}
+
+export async function adminSetRecipientActive(id: string, active: boolean): Promise<void> {
+  await requireAdmin();
+  if (!isUuid(id)) return;
+  await sql`UPDATE notify_recipients SET active = ${!!active} WHERE id = ${id}`;
+}
+
+export async function adminDeleteRecipient(id: string): Promise<void> {
+  await requireAdmin();
+  if (!isUuid(id)) return;
+  await sql`DELETE FROM notify_recipients WHERE id = ${id}`;
 }
 
 export async function adminListMessages(): Promise<AdminMessage[]> {
