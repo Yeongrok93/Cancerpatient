@@ -120,3 +120,15 @@ CREATE TABLE IF NOT EXISTS notify_recipients (
   active     BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- One row per automated reminder text sent (see src/lib/reminders.ts). The unique key
+-- (participant, kind, cycle_date) stops a participant getting the same reminder twice;
+-- cycle_date is the KST date of the completed survey the reminder follows.
+CREATE TABLE IF NOT EXISTS reminder_log (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  participant_id UUID NOT NULL REFERENCES participants(id) ON DELETE CASCADE,
+  kind           TEXT NOT NULL,
+  cycle_date     DATE NOT NULL,
+  sent_at        TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (participant_id, kind, cycle_date)
+);
