@@ -134,3 +134,17 @@ CREATE TABLE IF NOT EXISTS nursing_notes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_nursing_notes_patient ON nursing_notes (patient_code, note_date DESC, created_at DESC);
+
+-- Nursing-notes summary printed on the clinic hand-out. Tied to the notes it was written from
+-- by notes_hash, so the same notes always print the same summary (see src/lib/notesSummary.ts).
+CREATE TABLE IF NOT EXISTS note_summaries (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_code   TEXT NOT NULL,
+  notes_hash     TEXT NOT NULL,
+  summary        TEXT NOT NULL,
+  model          TEXT NOT NULL,
+  source         TEXT NOT NULL CHECK (source IN ('api', 'manual')),
+  prompt_version TEXT NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (patient_code, notes_hash, prompt_version)
+);

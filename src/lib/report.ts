@@ -1,12 +1,15 @@
 // Clinic hand-out ("진료용 요약"): the symptoms a doctor should look at first —
 // Grade 3 now, or Grade higher than at the previous survey — plus a summary of the
 // nursing notes. Pure functions: data in, self-contained printable HTML out
-// (A4, grayscale, inline SVG) so it prints to PDF from any browser.
+// (A4, grayscale, inline SVG), aimed at a single page.
 
 import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, type SurveyItem, type QuestionType } from "./questions";
 import { computeItemGrade, GRADE_LABELS } from "./proctcaeGrading";
 import { patientLabel } from "./patientLabel";
 import type { NotesSummary } from "./notesSummary";
+
+/** Bump when the layout or wording of the document changes. Printed in the footer. */
+export const REPORT_TEMPLATE_VERSION = "2";
 
 export type ReportSession = { id: string; completed_at: string | null };
 export type ReportAnswer = {
@@ -23,31 +26,34 @@ export type ReportInput = {
   sessions: ReportSession[]; // completed 증상 설문, oldest first
   answers: ReportAnswer[];
   notes: NotesSummary;
+  /** Printed as 작성일. Defaults to now; pass a date to regenerate a document "as of" that day. */
   generatedAt?: Date;
+  /** Fingerprint of the printed data (see reportData.ts), shown in the footer. */
+  dataId?: string;
   /** Adds a screen-only "print" bar and opens the print dialog on load. */
   autoPrint?: boolean;
 };
 
 type ItemSeries = { item: SurveyItem; grades: (number | null)[]; values: Record<string, number>[] };
 
-const TYPE_LABEL: Record<QuestionType, string> = {
+const TYPE_SHORT: Record<QuestionType, string> = {
   frequency: "빈도",
   severity: "심각도",
-  interference: "일상생활 영향",
+  interference: "영향",
   presence: "유무",
 };
+
+const MAX_TREND_ROWS = 8;
 
 const esc = (s: unknown) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
+const kstDate = (d: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(d);
+
 function mmdd(iso: string | null): string {
   if (!iso) return "—";
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date(iso)).split("-");
-  return `${parts[1]}.${parts[2]}`;
-}
-
-function ymd(d: Date): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(d).replace(/-/g, ".");
+  const [, m, d] = kstDate(new Date(iso)).split("-");
+  return `${m}.${d}`;
 }
 
 function weekName(i: number): string {
@@ -77,7 +83,7 @@ function buildSeries(input: ReportInput): ItemSeries[] {
   return out;
 }
 
-// ── visuals (inline SVG, grayscale) ───────────────────────────────────
+// ── visuals (inline SVG / CSS, grayscale) ────────────────────────────────
 
 const FILL: Record<number, { bg: string; fg: string }> = {
   0: { bg: "#ffffff", fg: "#666666" },
@@ -87,36 +93,36 @@ const FILL: Record<number, { bg: string; fg: string }> = {
 };
 
 function gradeBox(g: number | null): string {
-  if (g === null) return `<span class="gb gb-na">—</span>`;
+  if (g === null) return `<span class="gb gb-na">–</span>`;
   const { bg, fg } = FILL[g];
   return `<span class="gb" style="background:${bg};color:${fg}">${g}</span>`;
 }
 
-/** Tiny line chart of one symptom's grade across all surveys. */
+/** Small line chart of one symptom's grade across surveys (only drawn from 3 surveys on). */
 function sparkline(grades: (number | null)[]): string {
-  const w = 96, h = 30, padX = 8, padY = 5;
+  const w = 64, h = 20, padX = 5, padY = 3;
   const n = grades.length;
-  const x = (i: number) => (n === 1 ? w / 2 : padX + (i * (w - padX * 2)) / (n - 1));
+  const x = (i: number) => padX + (i * (w - padX * 2)) / (n - 1);
   const y = (g: number) => h - padY - (g * (h - padY * 2)) / 3;
-  const pts = grades.map((g, i) => (g === null ? null : { x: x(i), y: y(g), g, i }));
-  const defined = pts.filter((p): p is NonNullable<typeof p> => p !== null);
-  const grid = [0, 1, 2, 3]
-    .map((g) => `<line x1="${padX - 4}" x2="${w - padX + 4}" y1="${y(g)}" y2="${y(g)}" stroke="${g === 3 ? "#bbbbbb" : "#eeeeee"}" stroke-width="0.8"/>`)
+  const defined = grades
+    .map((g, i) => (g === null ? null : { x: x(i), y: y(g) }))
+    .filter((p): p is { x: number; y: number } => p !== null);
+  const grid = [0, 3]
+    .map((g) => `<line x1="2" x2="${w - 2}" y1="${y(g)}" y2="${y(g)}" stroke="#dddddd" stroke-width="0.7"/>`)
     .join("");
-  const line = defined.length > 1 ? `<polyline fill="none" stroke="#333333" stroke-width="1.4" points="${defined.map((p) => `${p.x},${p.y}`).join(" ")}"/>` : "";
+  const line = defined.length > 1 ? `<polyline fill="none" stroke="#333" stroke-width="1.2" points="${defined.map((p) => `${p.x},${p.y}`).join(" ")}"/>` : "";
   const dots = defined
-    .map((p, k) => {
-      const last = k === defined.length - 1;
-      return `<circle cx="${p.x}" cy="${p.y}" r="${last ? 3.4 : 2.4}" fill="${last ? "#111111" : "#ffffff"}" stroke="#111111" stroke-width="1.2"/>`;
-    })
+    .map((p, k) => `<circle cx="${p.x}" cy="${p.y}" r="${k === defined.length - 1 ? 2.8 : 2}" fill="${k === defined.length - 1 ? "#111" : "#fff"}" stroke="#111" stroke-width="1"/>`)
     .join("");
   return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="등급 추이">${grid}${line}${dots}</svg>`;
 }
 
-/** One stacked bar per survey: how many symptoms were at each grade. */
+/** One stacked bar per survey: how many symptoms sat at each grade. */
 function distributionChart(series: ItemSeries[], sessions: ReportSession[]): string {
-  const rowH = 26, labelW = 92, barW = 380, totalW = 60;
-  const rows = sessions.map((s, i) => {
+  const first = Math.max(0, sessions.length - MAX_TREND_ROWS);
+  const shown = sessions.map((s, i) => ({ s, i })).slice(first);
+  const rowH = 19, barH = 12, labelW = 98, barW = 400, totalW = 54;
+  const rows = shown.map(({ s, i }) => {
     const counts = [0, 0, 0, 0];
     for (const it of series) {
       const g = it.grades[i];
@@ -125,25 +131,25 @@ function distributionChart(series: ItemSeries[], sessions: ReportSession[]): str
     return { label: `${weekName(i)} (${mmdd(s.completed_at)})`, counts, total: counts.reduce((a, b) => a + b, 0) };
   });
   const maxTotal = Math.max(1, ...rows.map((r) => r.total));
-  const height = rows.length * rowH + 4;
+  const height = rows.length * rowH + 2;
   const bars = rows
     .map((r, i) => {
-      const yTop = i * rowH + 4;
+      const yTop = i * rowH + 2;
       let xCur = labelW;
       const segs = r.counts
         .map((c, g) => {
           if (c === 0) return "";
           const wSeg = (c / maxTotal) * barW;
-          const rect = `<rect x="${xCur}" y="${yTop}" width="${wSeg}" height="16" fill="${FILL[g].bg}" stroke="#111111" stroke-width="0.8"/>`;
-          const txt = wSeg > 16 ? `<text x="${xCur + wSeg / 2}" y="${yTop + 12}" text-anchor="middle" font-size="10" fill="${FILL[g].fg}">${c}</text>` : "";
+          const rect = `<rect x="${xCur}" y="${yTop}" width="${wSeg}" height="${barH}" fill="${FILL[g].bg}" stroke="#111" stroke-width="0.7"/>`;
+          const txt = wSeg > 14 ? `<text x="${xCur + wSeg / 2}" y="${yTop + 9.5}" text-anchor="middle" font-size="9" fill="${FILL[g].fg}">${c}</text>` : "";
           xCur += wSeg;
           return rect + txt;
         })
         .join("");
-      return `<text x="${labelW - 8}" y="${yTop + 12}" text-anchor="end" font-size="10.5" fill="#222222">${esc(r.label)}</text>${segs}<text x="${labelW + barW + 8}" y="${yTop + 12}" font-size="10.5" fill="#222222">${r.total}개 응답</text>`;
+      return `<text x="${labelW - 6}" y="${yTop + 9.5}" text-anchor="end" font-size="9.5" fill="#222">${esc(r.label)}</text>${segs}<text x="${labelW + barW + 6}" y="${yTop + 9.5}" font-size="9.5" fill="#222">${r.total}개</text>`;
     })
     .join("");
-  return `<svg viewBox="0 0 ${labelW + barW + totalW + 20} ${height}" width="100%" role="img" aria-label="Grade별 증상 수">${bars}</svg>`;
+  return `<svg viewBox="0 0 ${labelW + barW + totalW} ${height}" width="100%" role="img" aria-label="Grade별 증상 수">${bars}</svg>`;
 }
 
 function legend(): string {
@@ -152,12 +158,19 @@ function legend(): string {
     .join("");
 }
 
-function answerText(it: ItemSeries, sessionIndex: number): string {
+/** "빈도 자주 · 심각도 심하다 · 영향 상당히" — the current answers, shortened to fit half a page. */
+function shortAnswers(it: ItemSeries, sessionIndex: number): string {
   const v = it.values[sessionIndex];
   return it.item.questions
-    .map((q) => (v[q.key] === undefined ? null : `${TYPE_LABEL[q.type]}: ${RESPONSE_OPTIONS[q.type][v[q.key]]}`))
+    .map((q) => (v[q.key] === undefined ? null : `${TYPE_SHORT[q.type]} ${RESPONSE_OPTIONS[q.type][v[q.key]].replace(/\s*(있다|이다)$/, "")}`))
     .filter(Boolean)
     .join(" · ");
+}
+
+/** One answer sits beside the name; several go on their own line underneath. */
+function responseHtml(text: string): string {
+  if (!text) return "";
+  return text.includes(" · ") ? `<div class="resp">${esc(text)}</div>` : `<span class="resp inl">${esc(text)}</span>`;
 }
 
 function notesHtml(notes: NotesSummary): string {
@@ -165,11 +178,13 @@ function notesHtml(notes: NotesSummary): string {
   if (notes.kind === "unavailable") return `<p class="muted">${esc(notes.reason)}</p>`;
   const lines = notes.text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const items = lines.map((l) => `<li>${esc(l.replace(/^[-•·*]\s*/, ""))}</li>`).join("");
-  const badge =
+  const meta =
     notes.kind === "sample"
       ? `<p class="sample">샘플 문구입니다 — 이 환자의 실제 노트가 아니며 화면 구성을 보기 위한 예시입니다.</p>`
-      : `<p class="muted small">간호 노트를 AI가 요약한 내용입니다. 원문과 다를 수 있으니 필요 시 원본 노트를 확인하세요.</p>`;
-  return `${badge}<ul class="notes">${items}</ul>`;
+      : `<p class="metaline">간호 노트를 AI(${esc(notes.model)})로 요약한 내용입니다${notes.source === "manual" ? " (연구자 확인·저장)" : ""} · ${esc(
+          kstDate(new Date(notes.createdAt)).replace(/-/g, ".")
+        )} · 원문과 다를 수 있습니다.</p>`;
+  return `<ul class="notes">${items}</ul>${meta}`;
 }
 
 // ── the document ────────────────────────────────────────────────────────
@@ -179,99 +194,79 @@ export function renderReportHtml(input: ReportInput): string {
   const generatedAt = input.generatedAt ?? new Date();
   const series = buildSeries(input);
   const last = sessions.length - 1;
+  const showSpark = sessions.length >= 3;
 
-  const flagged = series
-    .map((it) => {
-      const cur = last >= 0 ? it.grades[last] : null;
-      const prev = last >= 1 ? it.grades[last - 1] : null;
-      const grade3 = cur === 3;
-      const increased = cur !== null && prev !== null && cur > prev;
-      return { it, cur, prev, grade3, increased };
-    })
-    .filter((r) => r.grade3 || r.increased)
-    .sort(
-      (a, b) =>
-        (b.cur ?? 0) - (a.cur ?? 0) ||
-        (b.cur ?? 0) - (b.prev ?? 0) - ((a.cur ?? 0) - (a.prev ?? 0)) ||
-        CATEGORIES.indexOf(a.it.item.category) - CATEGORIES.indexOf(b.it.item.category) ||
-        a.it.item.id - b.it.item.id
-    );
-
-  const grade3Count = flagged.filter((r) => r.grade3).length;
-  const increasedCount = flagged.filter((r) => r.increased).length;
   const prevLabel = last >= 1 ? `${weekName(last - 1)} (${mmdd(sessions[last - 1].completed_at)})` : null;
   const curLabel = last >= 0 ? `${weekName(last)} (${mmdd(sessions[last].completed_at)})` : "";
 
-  type Flagged = (typeof flagged)[number];
+  const rows = series.map((it) => {
+    const cur = last >= 0 ? it.grades[last] : null;
+    const prev = last >= 1 ? it.grades[last - 1] : null;
+    return { it, cur, prev, grade3: cur === 3, increased: cur !== null && prev !== null && cur > prev };
+  });
+  type Row = (typeof rows)[number];
+  const grade3Rows = rows.filter((r) => r.grade3);
+  const upRows = rows.filter((r) => r.increased && !r.grade3);
 
-  /** One table; same-category rows share a merged first cell. */
-  const renderTable = (list: Flagged[], withResponse: boolean): string => {
-    const groups = CATEGORIES.map((category) => ({
-      category,
-      rows: list
-        .filter((r) => r.it.item.category === category)
-        .sort((x, y) => (y.cur ?? 0) - (y.prev ?? 0) - ((x.cur ?? 0) - (x.prev ?? 0)) || x.it.item.id - y.it.item.id),
-    })).filter((g) => g.rows.length > 0);
-
-    const rowsHtml = groups
-      .map(({ category, rows }) =>
-        rows
-          .map((r, i) => {
-            const { main, note } = splitTerm(r.it.item.termKo);
-            const change =
-              r.prev === null
-                ? `<span class="muted">비교 없음</span>`
-                : r.cur! > r.prev
-                  ? `<b>▲ 증가</b> <span class="muted">(${r.prev}→${r.cur})</span>`
-                  : r.cur! < r.prev
-                    ? `▼ 감소 <span class="muted">(${r.prev}→${r.cur})</span>`
-                    : `<span class="muted">유지</span>`;
-            return `<tr>
-            ${i === 0 ? `<td class="cat" rowspan="${rows.length}">${esc(category)}</td>` : ""}
-            <td class="sym"><b>${esc(main)}</b>${note ? `<span class="note">${esc(note)}</span>` : ""}${withResponse ? `<span class="resp">${esc(answerText(r.it, last))}</span>` : ""}</td>
-            <td class="c">${r.prev === null ? `<span class="gb gb-na">—</span>` : gradeBox(r.prev)}</td>
-            <td class="c">${gradeBox(r.cur)}</td>
-            <td class="chg">${change}</td>
-            <td class="c">${sparkline(r.it.grades)}</td>
-          </tr>`;
-          })
-          .join("")
-      )
-      .join("");
-
-    return `<table class="grid">
-      <colgroup><col style="width:17mm"><col><col style="width:22mm"><col style="width:16mm"><col style="width:27mm"><col style="width:27mm"></colgroup>
-      <thead><tr><th>분류</th><th>증상${withResponse ? " · 현재 응답" : ""}</th><th class="c">${esc(prevLabel ?? "이전").replace(" (", "<br>(")}</th><th class="c">현재</th><th>변화</th><th class="c">등급 추이</th></tr></thead>
-      <tbody>${rowsHtml}</tbody>
-    </table>`;
+  const itemHtml = (r: Row, withResponse: boolean): string => {
+    const { main, note } = splitTerm(r.it.item.termKo);
+    const same = r.prev !== null && r.cur === r.prev;
+    return `<div class="it">
+      <div class="gg">${gradeBox(r.prev)}<span class="ar${r.increased ? " up" : ""}">${r.increased ? "▲" : "→"}</span>${gradeBox(r.cur)}</div>
+      <div class="tx"><b>${esc(main)}</b>${note ? `<span class="note"> ${esc(note)}</span>` : ""}${same ? `<span class="same"> 유지</span>` : ""}${
+        withResponse ? responseHtml(shortAnswers(r.it, last)) : ""
+      }</div>
+      ${showSpark ? sparkline(r.it.grades) : ""}
+    </div>`;
   };
 
-  const grade3Rows = flagged.filter((r) => r.grade3);
-  const upRows = flagged.filter((r) => r.increased && !r.grade3);
+  const columnsHtml = (list: Row[], withResponse: boolean): string => {
+    const blocks = CATEGORIES.map((category) => {
+      const inCat = list
+        .filter((r) => r.it.item.category === category)
+        .sort((x, y) => (y.cur ?? 0) - (y.prev ?? 0) - ((x.cur ?? 0) - (x.prev ?? 0)) || x.it.item.id - y.it.item.id);
+      return inCat.length === 0
+        ? ""
+        : `<div class="cb"><div class="ch">${esc(category)}</div>${inCat.map((r) => itemHtml(r, withResponse)).join("")}</div>`;
+    }).join("");
+    return `<div class="cols">${blocks}</div>`;
+  };
+
+  /** Compact list for the secondary section: category label, then chips "[0▲1] 구토". */
+  const chipRowsHtml = (list: Row[]): string =>
+    CATEGORIES.map((category) => {
+      const inCat = list
+        .filter((r) => r.it.item.category === category)
+        .sort((x, y) => (y.cur ?? 0) - (y.prev ?? 0) - ((x.cur ?? 0) - (x.prev ?? 0)) || x.it.item.id - y.it.item.id);
+      if (inCat.length === 0) return "";
+      const chips = inCat
+        .map(
+          (r) =>
+            `<span class="chip">${gradeBox(r.prev)}<span class="ar up">▲</span>${gradeBox(r.cur)}<b>${esc(splitTerm(r.it.item.termKo).main)}</b></span>`
+        )
+        .join("");
+      return `<div class="ir"><span class="irc">${esc(category)}</span><span class="chips">${chips}</span></div>`;
+    }).join("");
 
   const body =
     sessions.length === 0
       ? `<p class="muted">완료된 증상 설문이 없습니다.</p>`
       : `
     <section class="summary">
-      <div class="stat"><div class="n">${sessions.length}</div><div class="l">완료한 증상 설문</div></div>
-      <div class="stat"><div class="n">${grade3Count}</div><div class="l">현재 Grade 3 (중증)</div></div>
-      <div class="stat"><div class="n">${prevLabel ? increasedCount : "—"}</div><div class="l">이전 설문보다 증가</div></div>
+      <div class="stat"><b>${sessions.length}회</b> 완료한 증상 설문</div>
+      <div class="stat"><b>${grade3Rows.length}개</b> 현재 Grade 3 (중증)</div>
+      <div class="stat"><b>${prevLabel ? `${rows.filter((r) => r.increased).length}개` : "—"}</b> 이전 설문보다 증가</div>
     </section>
-    <p class="muted small" style="margin-top:6px">기준 설문: ${esc(curLabel)}${prevLabel ? ` · 비교 설문: ${esc(prevLabel)}` : " · 이전 설문이 없어 증가 여부는 비교하지 않았습니다."}</p>
+    <div class="legend">${legend()}<span class="muted">기준 ${esc(curLabel)}${prevLabel ? ` · 비교 ${esc(prevLabel)}` : " · 이전 설문 없음"} · 칸은 이전 → 현재 · PRO-CTCAE 복합 등급</span></div>
 
     <h2>1. 현재 Grade 3 (중증) 증상 <span class="cnt">${grade3Rows.length}개</span></h2>
-    ${grade3Rows.length === 0 ? `<p class="none">해당하는 증상이 없습니다.</p>` : renderTable(grade3Rows, true)}
+    ${grade3Rows.length === 0 ? `<p class="none">해당하는 증상이 없습니다.</p>` : columnsHtml(grade3Rows, true)}
 
-    <h2>2. 이전 설문보다 Grade가 올라간 증상 <span class="cnt">${upRows.length}개</span></h2>
-    <p class="muted small">Grade 3이 아닌 항목만 모았습니다 (Grade 3 항목은 위 1번에 포함).</p>
-    ${!prevLabel ? `<p class="none">이전 설문이 없어 비교할 수 없습니다.</p>` : upRows.length === 0 ? `<p class="none">해당하는 증상이 없습니다.</p>` : renderTable(upRows, false)}
-    <div class="legend">${legend()}<span class="muted small">Grade는 PRO-CTCAE 복합 등급(빈도·심각도·일상생활 영향 조합) 기준입니다.</span></div>
+    <h2>2. 이전 설문보다 Grade가 올라간 증상 <span class="cnt">${upRows.length}개 · Grade 3 제외</span></h2>
+    ${!prevLabel ? `<p class="none">이전 설문이 없어 비교할 수 없습니다.</p>` : upRows.length === 0 ? `<p class="none">해당하는 증상이 없습니다.</p>` : chipRowsHtml(upRows)}
 
-    <h2>3. 전체 증상 부담 추이</h2>
-    <p class="muted small">설문마다 Grade별로 해당한 증상의 개수입니다.</p>
-    ${distributionChart(series, sessions)}
-    <div class="legend">${legend()}</div>`;
+    <h2>3. 증상 부담 추이 <span class="cnt">설문별 Grade별 증상 수${sessions.length > MAX_TREND_ROWS ? ` · 최근 ${MAX_TREND_ROWS}회` : ""}</span></h2>
+    ${distributionChart(series, sessions)}`;
 
   return `<!doctype html>
 <html lang="ko">
@@ -280,41 +275,47 @@ export function renderReportHtml(input: ReportInput): string {
 <title>${esc(patientLabel(input.code, input.name))} 진료용 요약</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  @page { size: A4; margin: 16mm 15mm 18mm; }
+  @page { size: A4; margin: 9mm 12mm 10mm; }
   * { box-sizing: border-box; }
   html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { margin: 0; color: #111; font: 10.5pt/1.5 "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; background: #fff; }
-  .page { max-width: 180mm; margin: 0 auto; padding: 8mm 0; }
-  header { border-bottom: 2px solid #111; padding-bottom: 8px; margin-bottom: 14px; }
-  header .ttl { font-size: 17pt; font-weight: 700; letter-spacing: -0.2px; }
-  header .meta { display: flex; justify-content: space-between; gap: 12px; margin-top: 4px; font-size: 10pt; }
-  h2 .cnt { font-weight: 400; font-size: 10pt; color: #555; margin-left: 6px; }
-  h2 { font-size: 12pt; margin: 20px 0 4px; padding-bottom: 3px; border-bottom: 1px solid #999; }
-  .muted { color: #555; } .small { font-size: 9pt; margin: 2px 0 8px; }
+  body { margin: 0; color: #111; font: 9pt/1.4 "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; background: #fff; }
+  .page { max-width: 184mm; margin: 0 auto; padding: 6mm 0; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; border-bottom: 2px solid #111; padding-bottom: 5px; margin-bottom: 8px; }
+  header .ttl { font-size: 14.5pt; font-weight: 700; letter-spacing: -0.2px; line-height: 1.2; }
+  header .sub { font-size: 8.5pt; color: #333; margin-top: 1px; }
+  header .who { text-align: right; font-size: 9pt; white-space: nowrap; } header .who b { font-size: 11pt; }
+  h2 { font-size: 10pt; margin: 9px 0 3px; padding-bottom: 2px; border-bottom: 1px solid #999; }
+  h2 .cnt { font-weight: 400; font-size: 8.5pt; color: #555; margin-left: 6px; }
+  .muted { color: #555; } p.muted { margin: 2px 0; }
   .summary { display: flex; border: 1px solid #111; }
-  .stat { flex: 1; padding: 8px 10px; text-align: center; border-right: 1px solid #111; }
-  .stat:last-child { border-right: 0; }
-  .stat .n { font-size: 20pt; font-weight: 700; line-height: 1.1; } .stat .l { font-size: 9pt; color: #333; }
-  table.grid { width: 100%; border-collapse: collapse; margin-top: 4px; table-layout: fixed; }
-  .grid th { background: #f0f0f0; font-size: 9pt; text-align: left; padding: 5px 6px; border: 1px solid #999; }
-  .grid td { padding: 5px 6px; border: 1px solid #bbb; vertical-align: middle; }
-  .grid tr { page-break-inside: avoid; break-inside: avoid; }
-  .c { text-align: center; } .cat { font-weight: 700; width: 17mm; background: #fafafa; vertical-align: top; }
-  .sym b { font-size: 10.5pt; } .sym .note { display: block; font-size: 8.5pt; color: #555; }
-  .sym .resp { display: block; font-size: 8.5pt; color: #333; margin-top: 1px; }
-  .chg { font-size: 9.5pt; white-space: nowrap; }
-  .gb { display: inline-block; min-width: 22px; height: 22px; line-height: 20px; text-align: center; border: 1px solid #111; font-weight: 700; font-size: 10pt; }
-  .gb.sm { min-width: 16px; height: 16px; line-height: 14px; font-size: 8.5pt; margin-right: 4px; }
-  .gb-na { border-color: #bbb; color: #999; font-weight: 400; }
-  .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 8px 0 0; font-size: 9pt; }
+  .stat { flex: 1; padding: 4px 8px; text-align: center; border-right: 1px solid #111; font-size: 8.5pt; color: #333; }
+  .stat:last-child { border-right: 0; } .stat b { font-size: 12pt; color: #111; margin-right: 3px; }
+  .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; margin: 5px 0 0; font-size: 8pt; }
   .lg { display: inline-flex; align-items: center; }
-  .none { padding: 10px; border: 1px dashed #999; text-align: center; }
-  .spark { display: block; margin: 0 auto; }
+  .cols { column-count: 2; column-gap: 7mm; column-rule: 1px solid #e3e3e3; }
+  .cb { break-inside: avoid; margin-bottom: 3px; }
+  .ch { font-size: 8.5pt; font-weight: 700; padding: 1px 0 2px; border-bottom: 1px solid #111; margin-bottom: 1px; }
+  .it { display: flex; align-items: center; gap: 6px; padding: 2px 0; border-bottom: 1px solid #ececec; break-inside: avoid; }
+  .gg { display: flex; align-items: center; gap: 2px; flex: none; }
+  .ar { font-size: 7.5pt; color: #666; width: 10px; text-align: center; } .ar.up { color: #111; font-weight: 700; }
+  .tx { flex: 1; min-width: 0; line-height: 1.3; } .tx b { font-size: 9.2pt; }
+  .note { font-size: 7.5pt; color: #555; } .same { font-size: 7.5pt; color: #777; }
+  .resp { font-size: 7.5pt; color: #333; } .resp.inl { margin-left: 5px; }
+  .ir { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; border-bottom: 1px solid #ececec; }
+  .irc { flex: none; width: 24mm; font-size: 8.5pt; font-weight: 700; padding-top: 1px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 3px 14px; }
+  .chip { display: inline-flex; align-items: center; gap: 2px; white-space: nowrap; } .chip b { margin-left: 4px; font-size: 9pt; }
+  .gb { display: inline-block; min-width: 17px; height: 17px; line-height: 15px; text-align: center; border: 1px solid #111; font-weight: 700; font-size: 8.5pt; }
+  .gb.sm { min-width: 14px; height: 14px; line-height: 12px; font-size: 7.5pt; margin-right: 3px; }
+  .gb-na { border-color: #bbb; color: #999; font-weight: 400; }
+  .spark { flex: none; }
+  .none { padding: 6px; border: 1px dashed #999; text-align: center; margin: 3px 0; }
   svg text { font-family: inherit; }
-  ul.notes { margin: 4px 0 0; padding-left: 18px; } ul.notes li { margin: 3px 0; }
-  .sample { border: 1px dashed #111; padding: 4px 8px; font-size: 9pt; margin: 4px 0 6px; }
-  footer { margin-top: 22px; padding-top: 6px; border-top: 1px solid #999; font-size: 8.5pt; color: #555; display: flex; justify-content: space-between; gap: 12px; }
-  section.notes-block { page-break-inside: avoid; break-inside: avoid; }
+  ul.notes { margin: 3px 0 0; padding-left: 16px; } ul.notes li { margin: 2px 0; }
+  .metaline { margin: 4px 0 0; font-size: 7.5pt; color: #666; }
+  .sample { border: 1px dashed #111; padding: 3px 7px; font-size: 8pt; margin: 4px 0 0; }
+  section.notes-block { break-inside: avoid; }
+  footer { margin-top: 10px; padding-top: 4px; border-top: 1px solid #999; font-size: 7.5pt; color: #555; display: flex; justify-content: space-between; gap: 12px; }
   .bar { position: sticky; top: 0; background: #111; color: #fff; padding: 8px 14px; font-size: 10pt; display: flex; justify-content: space-between; align-items: center; }
   .bar button { font: inherit; padding: 4px 12px; border: 1px solid #fff; background: #fff; color: #111; cursor: pointer; }
   @media print { .bar { display: none; } .page { padding: 0; max-width: none; } }
@@ -324,11 +325,11 @@ export function renderReportHtml(input: ReportInput): string {
 ${input.autoPrint ? `<div class="bar"><span>인쇄 창에서 대상을 “PDF로 저장”으로 선택하세요.</span><button onclick="window.print()">인쇄 / PDF 저장</button></div>` : ""}
 <div class="page">
   <header>
-    <div class="ttl">진료 참고 자료 · 증상 설문 요약</div>
-    <div class="meta">
-      <span><b>${esc(patientLabel(input.code, input.name))}</b> · 외래기반 ADC 치료 환자 증상 부담 연구(PRO-CTCAE)</span>
-      <span>작성일 ${esc(ymd(generatedAt))}</span>
+    <div>
+      <div class="ttl">진료 참고 자료 · 증상 설문 요약</div>
+      <div class="sub">외래기반 항체-약물 접합체(ADC) 치료 환자 증상 부담 연구 (PRO-CTCAE)</div>
     </div>
+    <div class="who"><b>${esc(patientLabel(input.code, input.name))}</b><br>작성일 ${esc(kstDate(generatedAt).replace(/-/g, "."))}</div>
   </header>
 
   ${body}
@@ -339,7 +340,8 @@ ${input.autoPrint ? `<div class="bar"><span>인쇄 창에서 대상을 “PDF로
   </section>
 
   <footer>
-    <span>이 자료는 환자가 직접 응답한 설문과 연구 간호사의 기록을 정리한 것으로, 진단이나 치료 지침이 아닙니다.</span>
+    <span>환자가 직접 응답한 설문과 연구 간호사의 기록을 정리한 자료이며, 진단이나 치료 지침이 아닙니다.</span>
+    <span>자료 ID ${esc(input.dataId ?? "—")} · 양식 v${REPORT_TEMPLATE_VERSION}</span>
   </footer>
 </div>
 ${input.autoPrint ? `<script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 400); });</script>` : ""}

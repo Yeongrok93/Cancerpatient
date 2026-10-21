@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "report": "node --env-file=.env --import tsx scripts/make-report.ts",
+    "save-summary": "node --env-file=.env --import tsx scripts/save-summary.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
@@ -23,6 +25,7 @@
     "eslint-config-next": "^16.4.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.1",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }

@@ -15,6 +15,7 @@ Next.js(App Router) + Neon Postgres, Vercel 배포.
 - **환자별 링크** (`/s/<토큰>/<w0|pro|qlq>`): 관리자 화면에서 환자·설문별 링크를 복사해 전달. 본인확인 없이 바로 해당 설문이 시작됨 (토큰은 64자 무작위, 링크 소지자 = 해당 환자)
 - **안내 문자** (Vercel Cron, 매일 10시 KST): 연구참여 확인된 참여자에게 마지막 증상 설문 완료 7일 뒤 설문 링크·적립금 안내 문자 발송. 같은 완료분에는 한 번만 발송. 적립금은 증상 설문 1회당 10,000원 + 삶의 질 설문 완료 시 10,000원 추가
 - **미응답 알림**: 안내 문자 발송 3일 뒤에도 증상 설문이 없으면 `FOLLOWUP_NOTIFY_TO` 번호로 "연락 필요" 문자 (환자별 1회)
+- **진료용 요약 PDF** (1쪽): 환자 대시보드의 `진료용 PDF` 버튼(브라우저 인쇄 → PDF로 저장) 또는 `npm run report -- <참여자번호> [--date YYYY-MM-DD]`(preview/ 폴더에 HTML·PDF 생성, Chrome/Edge 필요). 같은 데이터면 HTML이 동일하게 재현되며 푸터에 자료 ID가 찍힘. 노트 요약은 노트 해시와 함께 `note_summaries`에 저장되어 같은 노트면 같은 요약을 사용 (`ANTHROPIC_API_KEY`가 있으면 자동 생성, 없으면 `npm run save-summary -- <번호> <요약.txt>`로 수동 저장)
 - **접수 확인 문자**: 참여신청 직후 신청자에게 "곧 연락드리겠습니다" 문자 (같은 번호는 24시간에 1회)
 - **PRO-CTCAE** (`/survey`): 80개 증상 항목·124문항을 영역별로 표시
   - 선택할 때마다 자동 저장, 중간에 나가도 다시 들어오면 이어서 진행 (미완료 세션 재사용, 기한 없음)
@@ -52,6 +53,7 @@ npm run dev
 | `SMS_SENDER` | 솔라피에 등록된 발신번호 |
 | `SMS_NOTIFY_TO` | 참여신청 알림 수신번호(쉼표 구분) |
 | `FOLLOWUP_NOTIFY_TO` | 미응답 알림을 받을 연구자 번호(쉼표 구분) |
+| `ANTHROPIC_API_KEY` | (선택) 진료용 요약의 간호 노트 요약 자동 생성. 노트 원문이 Anthropic API로 전송되므로 동의 범위 확인 필요 |
 | `CRON_SECRET` | Vercel Cron이 `/api/cron/reminders`를 호출할 때 쓰는 비밀값 (미설정 시 호출 거부) |
 | `SITE_URL` | (선택) 안내 문자 링크의 기준 주소. 기본값 `https://cancerpatient.vercel.app` |
 
