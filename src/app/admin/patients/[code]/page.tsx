@@ -7,8 +7,9 @@ import { adminGetPatientDashboard, adminListPatients, type AdminPatient, type Da
 import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, type SurveyItem, type QuestionType } from "@/lib/questions";
 import { computeItemGrade, GRADE_COLORS, GRADE_LABELS } from "@/lib/proctcaeGrading";
 import { patientLabel } from "@/lib/patientLabel";
+import NursingNotes from "./NursingNotes";
 
-type ViewMode = "composite" | "raw";
+type ViewMode = "composite" | "raw" | "notes";
 
 const TYPE_LABEL: Record<QuestionType, string> = {
   frequency: "빈도",
@@ -36,18 +37,25 @@ function splitTerm(term: string): { main: string; note: string } {
   return m ? { main: m[1], note: m[2] } : { main: term, note: "" };
 }
 
-/** Sliding pill switch between the two views. */
+/** Sliding pill switch between the views. */
 function ViewToggle({ view, onChange, rawCount }: { view: ViewMode; onChange: (v: ViewMode) => void; rawCount: number }) {
   const options: [ViewMode, string][] = [
     ["composite", "Composite Grade"],
     ["raw", `전체 문항 (${rawCount})`],
+    ["notes", "Nursing Notes"],
   ];
+  const index = options.findIndex(([mode]) => mode === view);
   return (
-    <div role="tablist" aria-label="보기 방식" className="relative inline-grid grid-cols-2 bg-gray-100 rounded-full p-1 text-sm font-medium select-none">
+    <div
+      role="tablist"
+      aria-label="보기 방식"
+      className="relative inline-grid bg-gray-100 rounded-full p-1 text-sm font-medium select-none"
+      style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}
+    >
       <span
         aria-hidden
-        className="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-full bg-white shadow transition-transform duration-200 ease-out"
-        style={{ transform: `translateX(${view === "composite" ? 0 : 100}%)` }}
+        className="absolute top-1 bottom-1 left-1 rounded-full bg-white shadow transition-transform duration-200 ease-out"
+        style={{ width: `calc((100% - 8px) / ${options.length})`, transform: `translateX(${index * 100}%)` }}
       />
       {options.map(([mode, label]) => (
         <button
@@ -326,28 +334,30 @@ export default function PatientDashboardPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center text-gray-400">
           불러오는 중...
         </div>
-      ) : sessions.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center text-gray-400">
-          완료된 PRO-CTCAE 설문이 없습니다.
-        </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
             <ViewToggle view={view} onChange={setView} rawCount={RAW_QUESTIONS.length} />
-            <button
-              onClick={exportCSV}
-              className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-            >
-              CSV 내보내기
-            </button>
+            {view !== "notes" && sessions.length > 0 && (
+              <button
+                onClick={exportCSV}
+                className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+              >
+                CSV 내보내기
+              </button>
+            )}
           </div>
-          {view === "composite" && (
+          {view === "composite" && sessions.length > 0 && (
             <div className="px-5 py-2.5 border-b border-gray-100">
               <Legend />
             </div>
           )}
 
-          {view === "composite" ? (
+          {view === "notes" ? (
+            <NursingNotes code={code} />
+          ) : sessions.length === 0 ? (
+            <div className="p-8 text-center text-gray-400 text-sm">완료된 PRO-CTCAE 설문이 없습니다.</div>
+          ) : view === "composite" ? (
             <>
               <div className="overflow-x-auto">
                 <table className="text-sm border-collapse">

@@ -153,3 +153,78 @@ export async function adminGetPatientDashboard(patientCode: string): Promise<{
     answers: answers as DashboardAnswer[],
   };
 }
+
+// ── Nursing Notes (per patient, free text + date) ───────────────────
+
+export type NursingNote = {
+  id: string;
+  patient_code: string;
+  note_date: string; // YYYY-MM-DD
+  body: string;
+  created_at: string;
+  updated_at: string;
+};
+
+const MAX_NOTE_LENGTH = 20000;
+
+function cleanNote(date: string, body: string): { date: string; body: string } | null {
+  const d = String(date ?? "").trim();
+  const b = String(body ?? "").replace(/\s+$/, "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(d)) || !b.trim() || b.length > MAX_NOTE_LENGTH) return null;
+  return { date: d, body: b };
+}
+
+export async function adminListNotes(patientCode: string): Promise<NursingNote[]> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  if (!code) return [];
+  const rows = await sql`
+    SELECT id, patient_code, note_date::text AS note_date, body, created_at, updated_at
+    FROM nursing_notes WHERE patient_code = ${code}
+    ORDER BY note_date DESC, created_at DESC
+  `;
+  return serialize(rows) as NursingNote[];
+}
+
+export async function adminAddNote(
+  patientCode: string,
+  date: string,
+  body: string
+): Promise<{ ok: true; note: NursingNote } | { ok: false; error: string }> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  const note = cleanNote(date, body);
+  if (!code || !note) return { ok: false, error: "날짜와 내용을 확인해 주세요." };
+  const [known] = await sql`SELECT 1 FROM participants WHERE patient_code = ${code} LIMIT 1`;
+  if (!known) return { ok: false, error: "알 수 없는 환자입니다." };
+  const [row] = await sql`
+    INSERT INTO nursing_notes (patient_code, note_date, body)
+    VALUES (${code}, ${note.date}::date, ${note.body})
+    RETURNING id, patient_code, note_date::text AS note_date, body, created_at, updated_at
+  `;
+  return { ok: true, note: serialize([row])[0] as NursingNote };
+}
+
+export async function adminUpdateNote(
+  id: string,
+  date: string,
+  body: string
+): Promise<{ ok: true; note: NursingNote } | { ok: false; error: string }> {
+  await requireAdmin();
+  const note = cleanNote(date, body);
+  if (!isUuid(id) || !note) return { ok: false, error: "날짜와 내용을 확인해 주세요." };
+  const rows = await sql`
+    UPDATE nursing_notes SET note_date = ${note.date}::date, body = ${note.body}, updated_at = NOW()
+    WHERE id = ${id}
+    RETURNING id, patient_code, note_date::text AS note_date, body, created_at, updated_at
+  `;
+  if (rows.length === 0) return { ok: false, error: "노트를 찾을 수 없습니다." };
+  return { ok: true, note: serialize(rows)[0] as NursingNote };
+}
+
+export async function adminDeleteNote(id: string): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  if (!isUuid(id)) return { ok: false };
+  await sql`DELETE FROM nursing_notes WHERE id = ${id}`;
+  return { ok: true };
+}

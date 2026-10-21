@@ -122,3 +122,15 @@ CREATE TABLE IF NOT EXISTS reminder_log (
   sent_at        TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (participant_id, kind, cycle_date)
 );
+
+-- Nursing Notes: free-text notes per participant (admin dashboard), newest date first.
+CREATE TABLE IF NOT EXISTS nursing_notes (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_code TEXT NOT NULL,
+  note_date    DATE NOT NULL,
+  body         TEXT NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_nursing_notes_patient ON nursing_notes (patient_code, note_date DESC, created_at DESC);
