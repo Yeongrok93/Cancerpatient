@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { adminGetPatientDashboard, type DashboardAnswer, type DashboardSession } from "@/lib/adminActions";
-import { SURVEY_ITEMS, RESPONSE_OPTIONS, type SurveyItem, type QuestionType } from "@/lib/questions";
+import { adminGetPatientDashboard, adminListPatients, type AdminPatient, type DashboardAnswer, type DashboardSession } from "@/lib/adminActions";
+import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, type SurveyItem, type QuestionType } from "@/lib/questions";
 import { computeItemGrade, GRADE_COLORS, GRADE_LABELS } from "@/lib/proctcaeGrading";
 import { patientLabel } from "@/lib/patientLabel";
 
@@ -30,6 +30,42 @@ const RAW_QUESTIONS = SURVEY_ITEMS.flatMap((item) =>
   item.questions.map((q, i) => ({ item, q, first: i === 0 }))
 );
 
+/** "낙담 (아무것도 …)" → main "낙담", note "아무것도 …". */
+function splitTerm(term: string): { main: string; note: string } {
+  const m = term.match(/^(.*?)\s*\((.*)\)\s*$/);
+  return m ? { main: m[1], note: m[2] } : { main: term, note: "" };
+}
+
+/** Sliding pill switch between the two views. */
+function ViewToggle({ view, onChange, rawCount }: { view: ViewMode; onChange: (v: ViewMode) => void; rawCount: number }) {
+  const options: [ViewMode, string][] = [
+    ["composite", "Composite grading"],
+    ["raw", `전체 문항 (${rawCount})`],
+  ];
+  return (
+    <div role="tablist" aria-label="보기 방식" className="relative inline-grid grid-cols-2 bg-gray-100 rounded-full p-1 text-sm font-medium select-none">
+      <span
+        aria-hidden
+        className="absolute top-1 bottom-1 left-1 w-[calc(50%-4px)] rounded-full bg-white shadow transition-transform duration-200 ease-out"
+        style={{ transform: `translateX(${view === "composite" ? 0 : 100}%)` }}
+      />
+      {options.map(([mode, label]) => (
+        <button
+          key={mode}
+          role="tab"
+          aria-selected={view === mode}
+          onClick={() => onChange(mode)}
+          className={`relative z-10 px-5 py-1.5 rounded-full text-center whitespace-nowrap transition-colors duration-200 ${
+            view === mode ? "text-gray-900" : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function formatWeekLabel(iso: string | null) {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" });
@@ -48,6 +84,7 @@ function buildTooltip(item: SurveyItem, values: Record<string, number> | undefin
 }
 
 export default function PatientDashboardPage() {
+  const router = useRouter();
   const params = useParams<{ code: string }>();
   const code = decodeURIComponent(params.code ?? "");
 
@@ -55,7 +92,7 @@ export default function PatientDashboardPage() {
   const [sessions, setSessions] = useState<DashboardSession[]>([]);
   const [answers, setAnswers] = useState<DashboardAnswer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAll, setShowAll] = useState(false);
+  const [patients, setPatients] = useState<AdminPatient[]>([]);
   const [view, setView] = useState<ViewMode>("composite");
 
   useEffect(() => {
@@ -80,6 +117,15 @@ export default function PatientDashboardPage() {
       cancelled = true;
     };
   }, [code]);
+
+  useEffect(() => {
+    adminListPatients().then(setPatients).catch((err) => console.error(err));
+  }, []);
+
+  const currentIndex = patients.findIndex((p) => p.patient_code === code);
+  function goTo(patientCode: string) {
+    router.push(`/admin/patients/${encodeURIComponent(patientCode)}`);
+  }
 
   // Composite view: one grade per symptom per week.
   const rows = useMemo(() => {
@@ -126,7 +172,11 @@ export default function PatientDashboardPage() {
 
   const latestSession = sessions[sessions.length - 1];
   const alertRows = latestSession ? rows.filter((r) => r.gradesBySession[latestSession.id] === 3) : [];
-  const visibleRows = showAll ? rows : rows.filter((r) => r.maxGrade >= 1);
+  const visibleRows = rows.filter((r) => r.maxGrade >= 1);
+  const alertGroups = CATEGORIES.map((category) => ({
+    category,
+    items: alertRows.filter((r) => r.item.category === category).map((r) => r.item),
+  })).filter((g) => g.items.length > 0);
 
   function rawLabel(a: DashboardAnswer | undefined, type: QuestionType): string {
     if (!a) return "—";
@@ -167,12 +217,76 @@ export default function PatientDashboardPage() {
         </Link>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-3">
-        <h1 className="text-xl font-bold text-gray-900">{patientLabel(code, name)}</h1>
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <h1 className="text-xl font-bold text-gray-900">{patientLabel(code, name)}</h1>
 
-        {alertRows.length > 0 && (
-          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-800">
-            <strong>이번 주 Grade 3(중증) 증상:</strong> {alertRows.map((r) => r.item.termKo).join(", ")}
+          {/* 다른 환자로 이동 */}
+          {patients.length > 1 && (
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => goTo(patients[currentIndex - 1].patient_code)}
+                disabled={currentIndex <= 0}
+                aria-label="이전 환자"
+                className="w-8 h-8 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                ‹
+              </button>
+              <select
+                value={currentIndex >= 0 ? code : ""}
+                onChange={(e) => goTo(e.target.value)}
+                aria-label="환자 선택"
+                className="h-8 px-2 rounded-lg border border-gray-200 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-primary-400"
+              >
+                {currentIndex < 0 && <option value="">환자 선택</option>}
+                {patients.map((p) => (
+                  <option key={p.patient_code} value={p.patient_code}>
+                    {patientLabel(p.patient_code, p.name)}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => goTo(patients[currentIndex + 1].patient_code)}
+                disabled={currentIndex < 0 || currentIndex >= patients.length - 1}
+                aria-label="다음 환자"
+                className="w-8 h-8 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                ›
+              </button>
+            </div>
+          )}
+        </div>
+
+        {alertGroups.length > 0 && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+            <p className="text-sm font-bold text-red-800">
+              이번 주 중증(Grade 3) 증상
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-red-600 text-white text-xs font-semibold">
+                {alertRows.length}개
+              </span>
+            </p>
+            <div className="space-y-2.5">
+              {alertGroups.map(({ category, items }) => (
+                <div key={category} className="flex items-start gap-3">
+                  <span className="shrink-0 w-14 pt-1 text-[11px] font-semibold text-red-700/80">{category}</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {items.map((item) => {
+                      const { main, note } = splitTerm(item.termKo);
+                      return (
+                        <span
+                          key={item.id}
+                          title={item.termKo}
+                          className="inline-flex items-baseline gap-1 rounded-lg bg-white border border-red-200 px-2.5 py-1 text-sm font-medium text-red-900"
+                        >
+                          {main}
+                          {note && <span className="text-[11px] font-normal text-red-700/70">{note}</span>}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -188,49 +302,17 @@ export default function PatientDashboardPage() {
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
-            {/* 보기 방식 토글 */}
-            <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit" role="tablist" aria-label="보기 방식">
-              {(
-                [
-                  ["composite", "Composite grading"],
-                  ["raw", `전체 문항 (${RAW_QUESTIONS.length})`],
-                ] as const
-              ).map(([mode, label]) => (
-                <button
-                  key={mode}
-                  role="tab"
-                  aria-selected={view === mode}
-                  onClick={() => setView(mode)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    view === mode ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <ViewToggle view={view} onChange={setView} rawCount={RAW_QUESTIONS.length} />
 
-            {view === "composite" ? (
-              <div className="flex items-center gap-4 flex-wrap">
-                <Legend />
-                <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={showAll}
-                    onChange={(e) => setShowAll(e.target.checked)}
-                    className="accent-primary-600"
-                  />
-                  전체 80개 항목 보기
-                </label>
-              </div>
-            ) : (
+            <div className="flex items-center gap-4 flex-wrap">
+              {view === "composite" && <Legend />}
               <button
                 onClick={exportCSV}
                 className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
               >
                 CSV 내보내기
               </button>
-            )}
+            </div>
           </div>
 
           {view === "composite" ? (
