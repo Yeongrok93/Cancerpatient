@@ -39,7 +39,7 @@ function splitTerm(term: string): { main: string; note: string } {
 /** Sliding pill switch between the two views. */
 function ViewToggle({ view, onChange, rawCount }: { view: ViewMode; onChange: (v: ViewMode) => void; rawCount: number }) {
   const options: [ViewMode, string][] = [
-    ["composite", "Composite grading"],
+    ["composite", "Composite Grade"],
     ["raw", `전체 문항 (${rawCount})`],
   ];
   return (
@@ -64,6 +64,11 @@ function ViewToggle({ view, onChange, rawCount }: { view: ViewMode; onChange: (v
       ))}
     </div>
   );
+}
+
+/** The first completed 증상 설문 is the baseline; later ones count weeks from it. */
+function weekName(index: number): string {
+  return index === 0 ? "Baseline" : `${index}주차`;
 }
 
 function formatWeekLabel(iso: string | null) {
@@ -159,7 +164,12 @@ export default function PatientDashboardPage() {
       result.push({ item, valuesBySession: bySession, gradesBySession, maxGrade });
     }
 
-    result.sort((a, b) => b.maxGrade - a.maxGrade || a.item.category.localeCompare(b.item.category));
+    result.sort(
+      (a, b) =>
+        CATEGORIES.indexOf(a.item.category) - CATEGORIES.indexOf(b.item.category) ||
+        b.maxGrade - a.maxGrade ||
+        a.item.id - b.item.id
+    );
     return result;
   }, [answers, sessions]);
 
@@ -173,6 +183,10 @@ export default function PatientDashboardPage() {
   const latestSession = sessions[sessions.length - 1];
   const alertRows = latestSession ? rows.filter((r) => r.gradesBySession[latestSession.id] === 3) : [];
   const visibleRows = rows.filter((r) => r.maxGrade >= 1);
+  const groupedRows = CATEGORIES.map((category) => ({
+    category,
+    rows: visibleRows.filter((r) => r.item.category === category),
+  })).filter((g) => g.rows.length > 0);
   const alertGroups = CATEGORIES.map((category) => ({
     category,
     items: alertRows.filter((r) => r.item.category === category).map((r) => r.item),
@@ -190,8 +204,32 @@ export default function PatientDashboardPage() {
     return a.answer_value === null ? "응답 없음" : `${a.answer_value} - ${RESPONSE_OPTIONS[type][a.answer_value]}`;
   }
 
+  function download(csv: string, suffix: string) {
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const el = document.createElement("a");
+    el.href = url;
+    el.download = `pro-ctcae-${suffix}-${patientLabel(code, name).replace(/[()\s]+/g, "_")}.csv`;
+    el.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportCompositeCSV() {
+    const weekHeads = sessions.map((s, i) => `${weekName(i)}(${formatWeekLabel(s.completed_at)})`);
+    const header = ["카테고리", "증상(한국어)", "증상(영문)", ...weekHeads];
+    const lines = rows.map(({ item, gradesBySession }) => {
+      const cells = sessions.map((s) => {
+        const g = gradesBySession[s.id];
+        return g === null || g === undefined ? "" : String(g);
+      });
+      return [item.category, item.termKo, item.termEn, ...cells].map((c) => `"${c.replace(/"/g, '""')}"`).join(",");
+    });
+    download([header.map((c) => `"${c}"`).join(","), ...lines].join("\n"), "composite");
+  }
+
   function exportCSV() {
-    const header = ["문항번호", "증상(한국어)", "증상(영문)", "소문항", "유형", ...sessions.map((s, i) => `${i + 1}주차(${formatWeekLabel(s.completed_at)})`)];
+    if (view === "composite") return exportCompositeCSV();
+    const header = ["문항번호", "증상(한국어)", "증상(영문)", "소문항", "유형", ...sessions.map((s, i) => `${weekName(i)}(${formatWeekLabel(s.completed_at)})`)];
     const lines = RAW_QUESTIONS.map(({ item, q }) => {
       const cells = sessions.map((s) => {
         const a = rawBySessionQuestion.get(`${s.id}|${item.id}|${q.key}`);
@@ -199,14 +237,7 @@ export default function PatientDashboardPage() {
       });
       return [item.id, item.termKo, item.termEn, q.key, TYPE_LABEL[q.type], ...cells].map((c) => `"${c}"`).join(",");
     });
-    const csv = [header.map((c) => `"${c}"`).join(","), ...lines].join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const el = document.createElement("a");
-    el.href = url;
-    el.download = `pro-ctcae-${patientLabel(code, name).replace(/[()\s]+/g, "_")}.csv`;
-    el.click();
-    URL.revokeObjectURL(url);
+    download([header.map((c) => `"${c}"`).join(","), ...lines].join("\n"), "all-questions");
   }
 
   return (
@@ -303,17 +334,18 @@ export default function PatientDashboardPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
             <ViewToggle view={view} onChange={setView} rawCount={RAW_QUESTIONS.length} />
-
-            <div className="flex items-center gap-4 flex-wrap">
-              {view === "composite" && <Legend />}
-              <button
-                onClick={exportCSV}
-                className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-              >
-                CSV 내보내기
-              </button>
-            </div>
+            <button
+              onClick={exportCSV}
+              className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+            >
+              CSV 내보내기
+            </button>
           </div>
+          {view === "composite" && (
+            <div className="px-5 py-2.5 border-b border-gray-100">
+              <Legend />
+            </div>
+          )}
 
           {view === "composite" ? (
             <>
@@ -321,43 +353,55 @@ export default function PatientDashboardPage() {
                 <table className="text-sm border-collapse">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase sticky left-0 bg-gray-50 z-10 min-w-[180px]">
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 sticky left-0 bg-gray-50 z-10 w-[112px] min-w-[112px]">
+                        카테고리
+                      </th>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 sticky left-[112px] bg-gray-50 z-10 min-w-[200px]">
                         증상
                       </th>
                       {sessions.map((s, idx) => (
-                        <th key={s.id} className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap min-w-[64px]">
-                          {idx + 1}주차
+                        <th key={s.id} className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap min-w-[72px]">
+                          {weekName(idx)}
                           <br />
                           <span className="font-normal text-gray-400">{formatWeekLabel(s.completed_at)}</span>
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {visibleRows.map(({ item, valuesBySession, gradesBySession }) => (
-                      <tr key={item.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-gray-800 font-medium sticky left-0 bg-white z-10 whitespace-nowrap">
-                          {item.termKo}
-                          <span className="block text-[11px] font-normal text-gray-400">{item.category}</span>
-                        </td>
-                        {sessions.map((s) => {
-                          const grade = gradesBySession[s.id];
-                          const values = valuesBySession.get(s.id);
-                          return (
-                            <td key={s.id} className="px-2 py-2 text-center">
-                              <span
-                                title={buildTooltip(item, values)}
-                                className={`inline-flex w-9 h-9 items-center justify-center rounded-lg text-sm font-bold cursor-default ${
-                                  grade === null ? "bg-gray-50 text-gray-300" : GRADE_COLORS[grade]
-                                }`}
-                              >
-                                {grade === null ? "—" : grade}
-                              </span>
+                  <tbody>
+                    {groupedRows.map(({ category, rows: groupRows }) =>
+                      groupRows.map(({ item, valuesBySession, gradesBySession }, i) => (
+                        <tr key={item.id} className={`hover:bg-gray-50 border-gray-100 ${i === 0 ? "border-t-2 border-gray-200" : "border-t"}`}>
+                          {i === 0 && (
+                            <td
+                              rowSpan={groupRows.length}
+                              className="px-4 py-2 align-top text-sm font-semibold text-gray-900 sticky left-0 bg-white z-10 border-r border-gray-100 whitespace-nowrap"
+                            >
+                              {category}
                             </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
+                          )}
+                          <td className="px-4 py-2 text-gray-900 font-medium sticky left-[112px] bg-white z-10 whitespace-nowrap">
+                            {item.termKo}
+                          </td>
+                          {sessions.map((s) => {
+                            const grade = gradesBySession[s.id];
+                            const values = valuesBySession.get(s.id);
+                            return (
+                              <td key={s.id} className="px-2 py-2 text-center">
+                                <span
+                                  title={buildTooltip(item, values)}
+                                  className={`inline-flex w-9 h-9 items-center justify-center rounded-lg text-sm font-bold cursor-default ${
+                                    grade === null ? "bg-gray-50 text-gray-300" : GRADE_COLORS[grade]
+                                  }`}
+                                >
+                                  {grade === null ? "—" : grade}
+                                </span>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -378,7 +422,7 @@ export default function PatientDashboardPage() {
                     </th>
                     {sessions.map((s, idx) => (
                       <th key={s.id} className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap min-w-[64px]">
-                        {idx + 1}주차
+                        {weekName(idx)}
                         <br />
                         <span className="font-normal text-gray-400">{formatWeekLabel(s.completed_at)}</span>
                       </th>
