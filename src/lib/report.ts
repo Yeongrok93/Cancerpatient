@@ -28,6 +28,8 @@ export type ReportInput = {
   sessions: ReportSession[]; // completed 증상 설문, oldest first
   answers: ReportAnswer[];
   notes: NotesSummary;
+  /** Language of the whole document (default Korean). */
+  lang?: ReportLang;
   /** Printed as 작성일. Defaults to now; pass a date to regenerate a document "as of" that day. */
   generatedAt?: Date;
   /** Fingerprint of the printed data (see reportData.ts), shown in the footer. */
@@ -38,18 +40,131 @@ export type ReportInput = {
 
 type ItemSeries = { item: SurveyItem; grades: (number | null)[]; values: Record<string, number>[] };
 
-const TYPE_SHORT: Record<QuestionType, string> = {
-  frequency: "빈도",
-  severity: "심각도",
-  interference: "영향",
-  presence: "유무",
+export type ReportLang = "ko" | "en";
+
+/** NCI PRO-CTCAE English response wording. */
+const EN_OPTIONS: Record<QuestionType, string[]> = {
+  frequency: ["Never", "Rarely", "Occasionally", "Frequently", "Almost constantly"],
+  severity: ["None", "Mild", "Moderate", "Severe", "Very severe"],
+  interference: ["Not at all", "A little bit", "Somewhat", "Quite a bit", "Very much"],
+  presence: ["No", "Yes"],
 };
+
+const EN_CATEGORY: Record<string, string> = {
+  구강: "Oral",
+  소화기계: "Gastrointestinal",
+  호흡기: "Respiratory",
+  심혈관계: "Cardiovascular",
+  "피부, 모발 및 손발톱": "Skin, Hair & Nails",
+  "신경계 및 감각기계": "Neurologic & Sensory",
+  통증: "Pain",
+  "수면, 피로 및 정서": "Sleep, Fatigue & Mood",
+  생식기계: "Reproductive",
+  비뇨기계: "Urinary",
+  성기능: "Sexual Function",
+  "기타 전신 증상": "Other Systemic",
+};
+
+type Copy = {
+  htmlLang: string;
+  fontStack: string;
+  title: string;
+  pageTitle: (name: string) => string;
+  issued: string;
+  s1: string;
+  s2: string;
+  s3: string;
+  s3sub: string;
+  s3recent: (n: number) => string;
+  s4: string;
+  noSessions: string;
+  noneG3: string;
+  noPrev: string;
+  same: string;
+  noNotes: string;
+  sample: string;
+  unit: (n: number) => string;
+  week: (i: number) => string;
+  printBar: string;
+  printButton: string;
+  footerTitle: string;
+  footerPi: string;
+  chartAria: string;
+  grade: Record<number, string>;
+  type: Record<QuestionType, string>;
+  option: (type: QuestionType, value: number) => string;
+};
+
+const COPY: Record<ReportLang, Copy> = {
+  ko: {
+    htmlLang: "ko",
+    fontStack: '"Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif',
+    title: "PRO-CTCAE 증상 설문 요약",
+    pageTitle: (n) => `${n} PRO-CTCAE 증상 설문 요약`,
+    issued: "작성일",
+    s1: "1. 현재 Grade 3 (중증) 증상",
+    s2: "2. 이전 설문보다 Grade가 올라간 증상",
+    s3: "3. 증상 부담 추이",
+    s3sub: "설문별 Grade별 증상 수",
+    s3recent: (n) => ` · 최근 ${n}회`,
+    s4: "간호 노트 요약",
+    noSessions: "완료된 증상 설문이 없습니다.",
+    noneG3: "해당하는 증상이 없습니다.",
+    noPrev: "이전 설문이 없어 비교할 수 없습니다.",
+    same: " 유지",
+    noNotes: "작성된 간호 노트가 없습니다.",
+    sample: "샘플 문구입니다 — 이 환자의 실제 노트가 아니며 화면 구성을 보기 위한 예시입니다.",
+    unit: (n) => `${n}개`,
+    week: (i) => (i === 0 ? "Baseline" : `${i}주차`),
+    printBar: "인쇄 창에서 대상을 “PDF로 저장”으로 선택하세요.",
+    printButton: "인쇄 / PDF 저장",
+    footerTitle: "외래기반 항체-약물 접합체(ADC) 치료를 받는 암 환자의 증상 부담 연구",
+    footerPi: "연구책임자 서울대병원 김혜진 수간호사",
+    chartAria: "Grade별 증상 수",
+    grade: GRADE_LABELS,
+    type: { frequency: "빈도", severity: "심각도", interference: "영향", presence: "유무" },
+    option: (type, v) => RESPONSE_OPTIONS[type][v].replace(/\s*(있다|이다)$/, ""),
+  },
+  en: {
+    htmlLang: "en",
+    fontStack: '"Segoe UI", "Helvetica Neue", Arial, "Noto Sans KR", "Malgun Gothic", sans-serif',
+    title: "PRO-CTCAE Symptom Summary",
+    pageTitle: (n) => `${n} – PRO-CTCAE Symptom Summary`,
+    issued: "Date",
+    s1: "1. Current Grade 3 (Severe) Symptoms",
+    s2: "2. Symptoms with a Higher Grade than the Previous Survey",
+    s3: "3. Symptom Burden Trend",
+    s3sub: "Number of symptoms at each grade, by survey",
+    s3recent: (n) => ` · last ${n} surveys`,
+    s4: "Nursing Notes Summary",
+    noSessions: "No completed symptom survey.",
+    noneG3: "None.",
+    noPrev: "No previous survey to compare with.",
+    same: " unchanged",
+    noNotes: "No nursing notes recorded.",
+    sample: "Sample text — not this patient's actual notes; shown only to preview the layout.",
+    unit: (n) => `${n} items`,
+    week: (i) => (i === 0 ? "Baseline" : `Week ${i}`),
+    printBar: 'In the print dialog, choose "Save as PDF" as the destination.',
+    printButton: "Print / Save as PDF",
+    footerTitle: "Symptom Burden in Cancer Patients Receiving Outpatient Antibody-Drug Conjugate (ADC) Therapy",
+    footerPi: "Principal Investigator: Hyejin Kim, Head Nurse, Seoul National University Hospital",
+    chartAria: "Number of symptoms by grade",
+    grade: { 0: "None", 1: "Mild", 2: "Moderate", 3: "Severe" },
+    type: { frequency: "Frequency", severity: "Severity", interference: "Interference", presence: "Presence" },
+    option: (type, v) => EN_OPTIONS[type][v],
+  },
+};
+
+/** Symptom name shown in the report: Korean name (+ its parenthetical note) or the NCI English term. */
+function termParts(item: SurveyItem, lang: ReportLang): { main: string; note: string } {
+  return lang === "en" ? { main: item.termEn, note: "" } : splitTerm(item.termKo);
+}
+
+const categoryLabel = (category: string, lang: ReportLang) => (lang === "en" ? EN_CATEGORY[category] ?? category : category);
 
 const MAX_TREND_ROWS = 8;
 
-/** Printed in the footer. The title is the one on the participant-facing start page. */
-const STUDY_TITLE = "외래기반 항체-약물 접합체(ADC) 치료를 받는 암 환자의 증상 부담 연구";
-const PRINCIPAL_INVESTIGATOR = "연구책임자 서울대병원 김혜진 수간호사";
 /** Basch E, et al. Clin Trials 2021;18(1):104-114 (PMID 33258687). */
 const GRADING_CITATION = "PRO-CTCAE Composite Grading Algorithm (Basch et al., 2021)";
 
@@ -64,8 +179,8 @@ function mmdd(iso: string | null): string {
   return `${m}.${d}`;
 }
 
-function weekName(i: number): string {
-  return i === 0 ? "Baseline" : `${i}주차`;
+function weekName(i: number, c: Copy): string {
+  return c.week(i);
 }
 
 export function splitTerm(term: string): { main: string; note: string } {
@@ -125,21 +240,21 @@ function sparkline(grades: (number | null)[]): string {
   const dots = defined
     .map((p, k) => `<circle cx="${p.x}" cy="${p.y}" r="${k === defined.length - 1 ? 2.8 : 2}" fill="${k === defined.length - 1 ? "#111" : "#fff"}" stroke="#111" stroke-width="1"/>`)
     .join("");
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="등급 추이">${grid}${line}${dots}</svg>`;
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="grade trend">${grid}${line}${dots}</svg>`;
 }
 
 /** One stacked bar per survey: how many symptoms sat at each grade. */
-function distributionChart(series: ItemSeries[], sessions: ReportSession[]): string {
+function distributionChart(series: ItemSeries[], sessions: ReportSession[], c: Copy): string {
   const first = Math.max(0, sessions.length - MAX_TREND_ROWS);
   const shown = sessions.map((s, i) => ({ s, i })).slice(first);
-  const rowH = 19, barH = 12, labelW = 98, barW = 400, totalW = 54;
+  const rowH = 19, barH = 12, labelW = 98, barW = 390, totalW = 64;
   const rows = shown.map(({ s, i }) => {
     const counts = [0, 0, 0, 0];
     for (const it of series) {
       const g = it.grades[i];
       if (g !== null) counts[g] += 1;
     }
-    return { label: `${weekName(i)} (${mmdd(s.completed_at)})`, counts, total: counts.reduce((a, b) => a + b, 0) };
+    return { label: `${weekName(i, c)} (${mmdd(s.completed_at)})`, counts, total: counts.reduce((a, b) => a + b, 0) };
   });
   const maxTotal = Math.max(1, ...rows.map((r) => r.total));
   const height = rows.length * rowH + 2;
@@ -157,23 +272,23 @@ function distributionChart(series: ItemSeries[], sessions: ReportSession[]): str
           return rect + txt;
         })
         .join("");
-      return `<text x="${labelW - 6}" y="${yTop + 9.5}" text-anchor="end" font-size="9.5" fill="#222">${esc(r.label)}</text>${segs}<text x="${labelW + barW + 6}" y="${yTop + 9.5}" font-size="9.5" fill="#222">${r.total}개</text>`;
+      return `<text x="${labelW - 6}" y="${yTop + 9.5}" text-anchor="end" font-size="9.5" fill="#222">${esc(r.label)}</text>${segs}<text x="${labelW + barW + 6}" y="${yTop + 9.5}" font-size="9.5" fill="#222">${c.unit(r.total)}</text>`;
     })
     .join("");
-  return `<svg viewBox="0 0 ${labelW + barW + totalW} ${height}" width="100%" role="img" aria-label="Grade별 증상 수">${bars}</svg>`;
+  return `<svg viewBox="0 0 ${labelW + barW + totalW} ${height}" width="100%" role="img" aria-label="${esc(c.chartAria)}">${bars}</svg>`;
 }
 
-function legend(): string {
+function legend(c: Copy): string {
   return [0, 1, 2, 3]
-    .map((g) => `<span class="lg"><span class="gb sm" style="background:${FILL[g].bg};color:${FILL[g].fg}">${g}</span>${esc(GRADE_LABELS[g])}</span>`)
+    .map((g) => `<span class="lg"><span class="gb sm" style="background:${FILL[g].bg};color:${FILL[g].fg}">${g}</span>${esc(c.grade[g])}</span>`)
     .join("");
 }
 
 /** "빈도 자주 · 심각도 심하다 · 영향 상당히" — the current answers, shortened to fit half a page. */
-function shortAnswers(it: ItemSeries, sessionIndex: number): string {
+function shortAnswers(it: ItemSeries, sessionIndex: number, c: Copy): string {
   const v = it.values[sessionIndex];
   return it.item.questions
-    .map((q) => (v[q.key] === undefined ? null : `${TYPE_SHORT[q.type]} ${RESPONSE_OPTIONS[q.type][v[q.key]].replace(/\s*(있다|이다)$/, "")}`))
+    .map((q) => (v[q.key] === undefined ? null : `${c.type[q.type]} ${c.option(q.type, v[q.key])}`))
     .filter(Boolean)
     .join(" · ");
 }
@@ -184,14 +299,14 @@ function responseHtml(text: string): string {
   return text.includes(" · ") ? `<div class="resp">${esc(text)}</div>` : `<span class="resp inl">${esc(text)}</span>`;
 }
 
-function notesHtml(notes: NotesSummary): string {
-  if (notes.kind === "none") return `<p class="muted">작성된 간호 노트가 없습니다.</p>`;
+function notesHtml(notes: NotesSummary, c: Copy): string {
+  if (notes.kind === "none") return `<p class="muted">${esc(c.noNotes)}</p>`;
   if (notes.kind === "unavailable") return `<p class="muted">${esc(notes.reason)}</p>`;
   const lines = notes.text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   const items = lines.map((l) => `<li>${esc(l.replace(/^[-•·*]\s*/, ""))}</li>`).join("");
   const meta =
     notes.kind === "sample"
-      ? `<p class="sample">샘플 문구입니다 — 이 환자의 실제 노트가 아니며 화면 구성을 보기 위한 예시입니다.</p>`
+      ? `<p class="sample">${esc(c.sample)}</p>`
       : "";
   return `<ul class="notes">${items}</ul>${meta}`;
 }
@@ -200,13 +315,15 @@ function notesHtml(notes: NotesSummary): string {
 
 export function renderReportHtml(input: ReportInput): string {
   const { sessions } = input;
+  const lang: ReportLang = input.lang ?? "ko";
+  const c = COPY[lang];
   const generatedAt = input.generatedAt ?? new Date();
   const displayName = input.name.trim() || formatPatientCode(input.code);
   const series = buildSeries(input);
   const last = sessions.length - 1;
   const showSpark = sessions.length >= 3;
 
-  const prevLabel = last >= 1 ? `${weekName(last - 1)} (${mmdd(sessions[last - 1].completed_at)})` : null;
+  const prevLabel = last >= 1 ? `${weekName(last - 1, c)} (${mmdd(sessions[last - 1].completed_at)})` : null;
 
   const rows = series.map((it) => {
     const cur = last >= 0 ? it.grades[last] : null;
@@ -218,12 +335,12 @@ export function renderReportHtml(input: ReportInput): string {
   const upRows = rows.filter((r) => r.increased && !r.grade3);
 
   const itemHtml = (r: Row, withResponse: boolean): string => {
-    const { main, note } = splitTerm(r.it.item.termKo);
+    const { main, note } = termParts(r.it.item, lang);
     const same = r.prev !== null && r.cur === r.prev;
     return `<div class="it">
       <div class="gg">${gradeBox(r.prev)}<span class="ar${r.increased ? " up" : ""}">${r.increased ? "▲" : "→"}</span>${gradeBox(r.cur)}</div>
-      <div class="tx"><b>${esc(main)}</b>${note ? `<span class="note"> ${esc(note)}</span>` : ""}${same ? `<span class="same"> 유지</span>` : ""}${
-        withResponse ? responseHtml(shortAnswers(r.it, last)) : ""
+      <div class="tx"><b>${esc(main)}</b>${note ? `<span class="note"> ${esc(note)}</span>` : ""}${same ? `<span class="same">${esc(c.same)}</span>` : ""}${
+        withResponse ? responseHtml(shortAnswers(r.it, last, c)) : ""
       }</div>
       ${showSpark ? sparkline(r.it.grades) : ""}
     </div>`;
@@ -236,7 +353,7 @@ export function renderReportHtml(input: ReportInput): string {
         .sort((x, y) => (y.cur ?? 0) - (y.prev ?? 0) - ((x.cur ?? 0) - (x.prev ?? 0)) || x.it.item.id - y.it.item.id);
       return inCat.length === 0
         ? ""
-        : `<div class="cb"><div class="ch">${esc(category)}</div>${inCat.map((r) => itemHtml(r, withResponse)).join("")}</div>`;
+        : `<div class="cb"><div class="ch">${esc(categoryLabel(category, lang))}</div>${inCat.map((r) => itemHtml(r, withResponse)).join("")}</div>`;
     }).join("");
     return `<div class="cols">${blocks}</div>`;
   };
@@ -251,32 +368,32 @@ export function renderReportHtml(input: ReportInput): string {
       const chips = inCat
         .map(
           (r) =>
-            `<span class="chip">${gradeBox(r.prev)}<span class="ar up">▲</span>${gradeBox(r.cur)}<b>${esc(splitTerm(r.it.item.termKo).main)}</b></span>`
+            `<span class="chip">${gradeBox(r.prev)}<span class="ar up">▲</span>${gradeBox(r.cur)}<b>${esc(termParts(r.it.item, lang).main)}</b></span>`
         )
         .join("");
-      return `<div class="ir"><span class="irc">${esc(category)}</span><span class="chips">${chips}</span></div>`;
+      return `<div class="ir"><span class="irc">${esc(categoryLabel(category, lang))}</span><span class="chips">${chips}</span></div>`;
     }).join("");
 
   const body =
     sessions.length === 0
-      ? `<p class="muted">완료된 증상 설문이 없습니다.</p>`
+      ? `<p class="muted">${esc(c.noSessions)}</p>`
       : `
-    <div class="legend">${legend()}<span class="muted">${GRADING_CITATION}</span></div>
+    <div class="legend">${legend(c)}<span class="muted">${GRADING_CITATION}</span></div>
 
-    <h2>1. 현재 Grade 3 (중증) 증상</h2>
-    ${grade3Rows.length === 0 ? `<p class="none">해당하는 증상이 없습니다.</p>` : columnsHtml(grade3Rows, true)}
+    <h2>${esc(c.s1)}</h2>
+    ${grade3Rows.length === 0 ? `<p class="none">${esc(c.noneG3)}</p>` : columnsHtml(grade3Rows, true)}
 
-    <h2>2. 이전 설문보다 Grade가 올라간 증상</h2>
-    ${!prevLabel ? `<p class="none">이전 설문이 없어 비교할 수 없습니다.</p>` : upRows.length === 0 ? `<p class="none">해당하는 증상이 없습니다.</p>` : chipRowsHtml(upRows)}
+    <h2>${esc(c.s2)}</h2>
+    ${!prevLabel ? `<p class="none">${esc(c.noPrev)}</p>` : upRows.length === 0 ? `<p class="none">${esc(c.noneG3)}</p>` : chipRowsHtml(upRows)}
 
-    <h2>3. 증상 부담 추이 <span class="cnt">설문별 Grade별 증상 수${sessions.length > MAX_TREND_ROWS ? ` · 최근 ${MAX_TREND_ROWS}회` : ""}</span></h2>
-    ${distributionChart(series, sessions)}`;
+    <h2>${esc(c.s3)} <span class="cnt">${esc(c.s3sub)}${sessions.length > MAX_TREND_ROWS ? esc(c.s3recent(MAX_TREND_ROWS)) : ""}</span></h2>
+    ${distributionChart(series, sessions, c)}`;
 
   return `<!doctype html>
-<html lang="ko">
+<html lang="${c.htmlLang}">
 <head>
 <meta charset="utf-8">
-<title>${esc(displayName)} PRO-CTCAE 증상 설문 요약</title>
+<title>${esc(c.pageTitle(displayName))}</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="report-data-id" content="${esc(input.dataId ?? "")}">
 <meta name="report-template" content="v${REPORT_TEMPLATE_VERSION}">
@@ -284,7 +401,7 @@ export function renderReportHtml(input: ReportInput): string {
   @page { size: A4; margin: 9mm 12mm 10mm; }
   * { box-sizing: border-box; }
   html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  body { margin: 0; color: #111; font: 9pt/1.4 "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif; background: #fff; }
+  body { margin: 0; color: #111; font: 9pt/1.4 ${c.fontStack}; background: #fff; }
   .page { max-width: 184mm; margin: 0 auto; padding: 6mm 0; }
   header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; border-bottom: 2px solid #111; padding-bottom: 5px; margin-bottom: 8px; }
   header .ttl { font-size: 14.5pt; font-weight: 700; letter-spacing: -0.2px; line-height: 1.2; }
@@ -323,23 +440,23 @@ export function renderReportHtml(input: ReportInput): string {
 </style>
 </head>
 <body>
-${input.autoPrint ? `<div class="bar"><span>인쇄 창에서 대상을 “PDF로 저장”으로 선택하세요.</span><button onclick="window.print()">인쇄 / PDF 저장</button></div>` : ""}
+${input.autoPrint ? `<div class="bar"><span>${esc(c.printBar)}</span><button onclick="window.print()">${esc(c.printButton)}</button></div>` : ""}
 <div class="page">
   <header>
-    <div class="ttl">PRO-CTCAE 증상 설문 요약</div>
-    <div class="who"><b>${esc(displayName)}</b><br>작성일 ${esc(kstDate(generatedAt).replace(/-/g, "."))}</div>
+    <div class="ttl">${esc(c.title)}</div>
+    <div class="who"><b>${esc(displayName)}</b><br>${esc(c.issued)} ${esc(kstDate(generatedAt).replace(/-/g, "."))}</div>
   </header>
 
   ${body}
 
   <section class="notes-block">
-    <h2>${sessions.length === 0 ? "1" : "4"}. 간호 노트 요약</h2>
-    ${notesHtml(input.notes)}
+    <h2>${sessions.length === 0 ? "1" : "4"}. ${esc(c.s4)}</h2>
+    ${notesHtml(input.notes, c)}
   </section>
 
   <footer>
-    <span>${esc(STUDY_TITLE)}</span>
-    <span>${esc(PRINCIPAL_INVESTIGATOR)}</span>
+    <span>${esc(c.footerTitle)}</span>
+    <span>${esc(c.footerPi)}</span>
   </footer>
 </div>
 ${input.autoPrint ? `<script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 400); });</script>` : ""}

@@ -14,6 +14,9 @@ import { sql } from "./db";
 
 /** Bump when SYSTEM_PROMPT changes, so old summaries are not mistaken for the new prompt's. */
 export const PROMPT_VERSION = "2026-10-21.1";
+export type SummaryLang = "ko" | "en";
+/** Korean keeps the original version string (existing rows stay valid); English gets its own. */
+export const promptVersionFor = (lang: SummaryLang) => (lang === "en" ? `${PROMPT_VERSION}-en` : PROMPT_VERSION);
 export const DEFAULT_MODEL = "claude-sonnet-5-5";
 
 export type NoteInput = { note_date: string; body: string };
@@ -37,6 +40,17 @@ export const SYSTEM_PROMPT = `당신은 암 환자 연구의 간호 노트를 �
 - 순서: 안전 관련 → 정서·증상 변화 → 치료에 대한 인식 → 진료·돌봄 접근의 어려움 → 환자가 원하는 것 → 이미 제공된 상담·설명과 환자의 반응.
 - 마크다운 제목, 굵은 글씨, 번호 목록은 쓰지 않습니다.`;
 
+export const SYSTEM_PROMPT_EN = `You summarize nursing notes from a cancer-patient research study for a clinic hand-out.
+The patient will carry this one-page document to their physician.
+
+Rules:
+- Use only what the notes say. Do not speculate and do not add diagnoses or treatment advice.
+- English, concise clinical tone. At most 7 lines; each line starts with "- " and is one sentence or short phrase of roughly 20 words or fewer.
+- Add dates as (M/D) when they matter. Do not name staff members; use roles such as "research nurse" or "head nurse".
+- Safety-related content (suicidal thoughts or self-harm, rapid deterioration, emergencies) must not be softened and goes on the first line.
+- Order: safety → emotional state and symptom changes → views about treatment → difficulties accessing care → what the patient wants → counselling already provided and the patient's response.
+- No markdown headings, bold text or numbered lists.`;
+
 /** Stable fingerprint of a patient's notes (order-independent, whitespace at the ends ignored). */
 export function notesHash(notes: NoteInput[]): string {
   const canon = notes
@@ -50,23 +64,23 @@ export async function saveNotesSummary(
   code: string,
   notes: NoteInput[],
   text: string,
-  meta: { model: string; source: "api" | "manual" }
+  meta: { model: string; source: "api" | "manual"; lang?: SummaryLang }
 ): Promise<void> {
   await sql`
     INSERT INTO note_summaries (patient_code, notes_hash, summary, model, source, prompt_version)
-    VALUES (${code}, ${notesHash(notes)}, ${text.trim()}, ${meta.model}, ${meta.source}, ${PROMPT_VERSION})
+    VALUES (${code}, ${notesHash(notes)}, ${text.trim()}, ${meta.model}, ${meta.source}, ${promptVersionFor(meta.lang ?? "ko")})
     ON CONFLICT (patient_code, notes_hash, prompt_version)
     DO UPDATE SET summary = EXCLUDED.summary, model = EXCLUDED.model, source = EXCLUDED.source, created_at = NOW()
   `;
 }
 
-export async function getNotesSummary(code: string, notes: NoteInput[]): Promise<NotesSummary> {
+export async function getNotesSummary(code: string, notes: NoteInput[], lang: SummaryLang = "ko"): Promise<NotesSummary> {
   if (notes.length === 0) return { kind: "none" };
 
   const hash = notesHash(notes);
   const [stored] = await sql`
     SELECT summary, model, source, created_at FROM note_summaries
-    WHERE patient_code = ${code} AND notes_hash = ${hash} AND prompt_version = ${PROMPT_VERSION}
+    WHERE patient_code = ${code} AND notes_hash = ${hash} AND prompt_version = ${promptVersionFor(lang)}
   `;
   if (stored) {
     return {
@@ -78,16 +92,17 @@ export async function getNotesSummary(code: string, notes: NoteInput[]): Promise
     };
   }
 
-  const generated = await generateWithApi(notes);
+  const generated = await generateWithApi(notes, lang);
   if (generated.ok) {
-    await saveNotesSummary(code, notes, generated.text, { model: generated.model, source: "api" });
+    await saveNotesSummary(code, notes, generated.text, { model: generated.model, source: "api", lang });
     return { kind: "summary", text: generated.text, model: generated.model, source: "api", createdAt: new Date().toISOString() };
   }
   return { kind: "unavailable", reason: generated.reason };
 }
 
 async function generateWithApi(
-  notes: NoteInput[]
+  notes: NoteInput[],
+  lang: SummaryLang
 ): Promise<{ ok: true; text: string; model: string } | { ok: false; reason: string }> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -113,8 +128,8 @@ async function generateWithApi(
         model,
         max_tokens: 1200,
         temperature: 0,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: `다음 간호 노트를 요약해 주세요.\n\n${parts.join("\n\n---\n\n")}` }],
+        system: lang === "en" ? SYSTEM_PROMPT_EN : SYSTEM_PROMPT,
+        messages: [{ role: "user", content: `${lang === "en" ? "Summarize the following nursing notes (they may be in Korean; write the summary in English)." : "다음 간호 노트를 요약해 주세요."}\n\n${parts.join("\n\n---\n\n")}` }],
       }),
       signal: AbortSignal.timeout(45_000),
     });

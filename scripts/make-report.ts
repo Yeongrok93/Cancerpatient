@@ -2,6 +2,7 @@
 //
 //   npm run report -- 1                      # participant code 1 → preview/report-001-<today>.pdf
 //   npm run report -- 1 --date 2026-10-21    # print that date as 작성일
+//   npm run report -- 1 --lang en            # English version (PRO-CTCAE terms, English summary)
 //   npm run report -- 1 --sample             # layout preview with made-up notes (not real data)
 //   npm run report -- 1 --html-only          # skip the PDF step
 //   npm run report -- 1 --out some/folder
@@ -38,7 +39,7 @@ function parseArgs(argv: string[]) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--sample" || a === "--html-only") flags.add(a);
-    else if (a === "--date" || a === "--out") values[a] = argv[++i] ?? "";
+    else if (a === "--date" || a === "--out" || a === "--lang") values[a] = argv[++i] ?? "";
     else if (a.startsWith("--")) throw new Error(`알 수 없는 옵션: ${a}`);
     else positional.push(a);
   }
@@ -58,13 +59,15 @@ async function main() {
   if (dateArg && !/^\d{4}-\d{2}-\d{2}$/.test(dateArg)) throw new Error("--date는 YYYY-MM-DD 형식이어야 합니다.");
   const asOf = dateArg ? new Date(`${dateArg}T12:00:00+09:00`) : undefined;
 
-  const input = await loadReportInput(code, { asOf, sampleNotes: flags.has("--sample") });
+  const lang = values["--lang"] === "en" ? "en" : "ko";
+  if (values["--lang"] && !["en", "ko"].includes(values["--lang"])) throw new Error("--lang은 ko 또는 en이어야 합니다.");
+  const input = await loadReportInput(code, { asOf, sampleNotes: flags.has("--sample"), lang });
   if (!input) throw new Error(`참여자번호 ${code}에 해당하는 참여자가 없습니다.`);
 
   const stamp = (dateArg ?? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date())).replace(/-/g, "");
   const outDir = path.resolve(values["--out"] || "preview");
   mkdirSync(outDir, { recursive: true });
-  const base = path.join(outDir, `report-${formatPatientCode(code)}-${stamp}${flags.has("--sample") ? "-sample" : ""}`);
+  const base = path.join(outDir, `report-${formatPatientCode(code)}-${stamp}${lang === "en" ? "-en" : ""}${flags.has("--sample") ? "-sample" : ""}`);
 
   writeFileSync(`${base}.html`, renderReportHtml(input), "utf8");
   console.log(`HTML  ${base}.html`);

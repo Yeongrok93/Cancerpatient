@@ -273,6 +273,14 @@ export default function PatientDashboardPage() {
             >
               진료용 PDF
             </a>
+            <a
+              href={`/api/admin/report/${encodeURIComponent(code)}?print=1&lang=en`}
+              target="_blank"
+              rel="noopener"
+              className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-800"
+            >
+              PDF (English)
+            </a>
           </div>
 
           {/* 다른 환자로 이동 */}
