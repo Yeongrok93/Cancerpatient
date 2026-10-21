@@ -123,7 +123,7 @@ CREATE TABLE IF NOT EXISTS reminder_log (
   UNIQUE (participant_id, kind, cycle_date)
 );
 
--- Nursing Notes: free-text notes per participant (admin dashboard), newest date first.
+-- Researcher Notes (table name kept as nursing_notes): free-text notes per participant (admin dashboard), newest date first.
 CREATE TABLE IF NOT EXISTS nursing_notes (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   patient_code TEXT NOT NULL,
@@ -135,7 +135,7 @@ CREATE TABLE IF NOT EXISTS nursing_notes (
 
 CREATE INDEX IF NOT EXISTS idx_nursing_notes_patient ON nursing_notes (patient_code, note_date DESC, created_at DESC);
 
--- Nursing-notes summary printed on the clinic hand-out. Tied to the notes it was written from
+-- Researcher-notes summary printed on the clinic hand-out. Tied to the notes it was written from
 -- by notes_hash, so the same notes always print the same summary (see src/lib/notesSummary.ts).
 CREATE TABLE IF NOT EXISTS note_summaries (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),

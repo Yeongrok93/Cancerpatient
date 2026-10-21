@@ -1,4 +1,4 @@
-// Server-only: the nursing-notes summary printed on the clinic hand-out.
+// Server-only: the researcher-notes summary printed on the clinic hand-out.
 //
 // Reproducibility: a summary is stored in `note_summaries`, keyed by a hash of the notes it
 // was written from (+ the prompt version). The same notes therefore always print the same
@@ -13,7 +13,7 @@ import { createHash } from "crypto";
 import { sql } from "./db";
 
 /** Bump when SYSTEM_PROMPT changes, so old summaries are not mistaken for the new prompt's. */
-export const PROMPT_VERSION = "2026-10-21.1";
+export const PROMPT_VERSION = "2026-10-21.2";
 export type SummaryLang = "ko" | "en";
 /** Korean keeps the original version string (existing rows stay valid); English gets its own. */
 export const promptVersionFor = (lang: SummaryLang) => (lang === "en" ? `${PROMPT_VERSION}-en` : PROMPT_VERSION);
@@ -29,7 +29,7 @@ export type NotesSummary =
 
 const MAX_INPUT_CHARS = 15_000;
 
-export const SYSTEM_PROMPT = `당신은 암 환자 연구의 간호 노트를 진료용으로 요약하는 보조자입니다.
+export const SYSTEM_PROMPT = `당신은 암 환자 연구의 연구자 노트를 진료용으로 요약하는 보조자입니다.
 환자가 담당 의사에게 보여 줄 한 장짜리 자료에 들어갈 요약을 작성합니다.
 
 규칙:
@@ -40,7 +40,7 @@ export const SYSTEM_PROMPT = `당신은 암 환자 연구의 간호 노트를 �
 - 순서: 안전 관련 → 정서·증상 변화 → 치료에 대한 인식 → 진료·돌봄 접근의 어려움 → 환자가 원하는 것 → 이미 제공된 상담·설명과 환자의 반응.
 - 마크다운 제목, 굵은 글씨, 번호 목록은 쓰지 않습니다.`;
 
-export const SYSTEM_PROMPT_EN = `You summarize nursing notes from a cancer-patient research study for a clinic hand-out.
+export const SYSTEM_PROMPT_EN = `You summarize researcher notes from a cancer-patient research study for a clinic hand-out.
 The patient will carry this one-page document to their physician.
 
 Rules:
@@ -129,7 +129,7 @@ async function generateWithApi(
         max_tokens: 1200,
         temperature: 0,
         system: lang === "en" ? SYSTEM_PROMPT_EN : SYSTEM_PROMPT,
-        messages: [{ role: "user", content: `${lang === "en" ? "Summarize the following nursing notes (they may be in Korean; write the summary in English)." : "다음 간호 노트를 요약해 주세요."}\n\n${parts.join("\n\n---\n\n")}` }],
+        messages: [{ role: "user", content: `${lang === "en" ? "Summarize the following researcher notes (they may be in Korean; write the summary in English)." : "다음 연구자 노트를 요약해 주세요."}\n\n${parts.join("\n\n---\n\n")}` }],
       }),
       signal: AbortSignal.timeout(45_000),
     });

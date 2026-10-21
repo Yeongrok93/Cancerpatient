@@ -6,11 +6,11 @@ import {
   adminAddNote,
   adminUpdateNote,
   adminDeleteNote,
-  type NursingNote,
+  type ResearcherNote,
 } from "@/lib/adminActions";
 import { kstToday } from "@/lib/surveySchedule";
 
-function sortNotes(notes: NursingNote[]): NursingNote[] {
+function sortNotes(notes: ResearcherNote[]): ResearcherNote[] {
   return [...notes].sort((a, b) => b.note_date.localeCompare(a.note_date) || b.created_at.localeCompare(a.created_at));
 }
 
@@ -22,12 +22,12 @@ function formatNoteDate(date: string): string {
   return `${date.replace(/-/g, ".")} (${weekday})`;
 }
 
-function wasEdited(n: NursingNote): boolean {
+function wasEdited(n: ResearcherNote): boolean {
   return new Date(n.updated_at).getTime() - new Date(n.created_at).getTime() > 2000;
 }
 
-export default function NursingNotes({ code }: { code: string }) {
-  const [notes, setNotes] = useState<NursingNote[]>([]);
+export default function ResearcherNotes({ code }: { code: string }) {
+  const [notes, setNotes] = useState<ResearcherNote[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -75,7 +75,7 @@ export default function NursingNotes({ code }: { code: string }) {
     setDraftDate(kstToday());
   }
 
-  function startEdit(n: NursingNote) {
+  function startEdit(n: ResearcherNote) {
     setEditingId(n.id);
     setEditDate(n.note_date);
     setEditBody(n.body);

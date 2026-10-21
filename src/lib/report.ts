@@ -1,6 +1,6 @@
 // Clinic hand-out ("진료용 요약"): the symptoms a doctor should look at first —
 // Grade 3 now, or Grade higher than at the previous survey — plus a summary of the
-// nursing notes. Pure functions: data in, self-contained printable HTML out
+// researcher notes. Pure functions: data in, self-contained printable HTML out
 // (A4, inline SVG; only the Grade boxes are coloured), aimed at a single page.
 
 import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, itemApplies, type Sex, type SurveyItem, type QuestionType } from "./questions";
@@ -107,12 +107,12 @@ const COPY: Record<ReportLang, Copy> = {
     s3: "3. 증상 부담 추이",
     s3sub: "설문별 Grade별 증상 수",
     s3recent: (n) => ` · 최근 ${n}회`,
-    s4: "간호 노트 요약",
+    s4: "연구자 노트 요약",
     noSessions: "완료된 증상 설문이 없습니다.",
     noneG3: "해당하는 증상이 없습니다.",
     noPrev: "이전 설문이 없어 비교할 수 없습니다.",
     same: " 유지",
-    noNotes: "작성된 간호 노트가 없습니다.",
+    noNotes: "작성된 연구자 노트가 없습니다.",
     sample: "샘플 문구입니다 — 이 환자의 실제 노트가 아니며 화면 구성을 보기 위한 예시입니다.",
     unit: (n) => `${n}개`,
     week: (i) => (i === 0 ? "Baseline" : `${i}주차`),
@@ -136,12 +136,12 @@ const COPY: Record<ReportLang, Copy> = {
     s3: "3. Symptom Burden Trend",
     s3sub: "Number of symptoms at each grade, by survey",
     s3recent: (n) => ` · last ${n} surveys`,
-    s4: "Nursing Notes Summary",
+    s4: "Researcher Notes Summary",
     noSessions: "No completed symptom survey.",
     noneG3: "None.",
     noPrev: "No previous survey to compare with.",
     same: " unchanged",
-    noNotes: "No nursing notes recorded.",
+    noNotes: "No researcher notes recorded.",
     sample: "Sample text — not this patient's actual notes; shown only to preview the layout.",
     unit: (n) => `${n} items`,
     week: (i) => (i === 0 ? "Baseline" : `Week ${i}`),

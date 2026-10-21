@@ -54,7 +54,7 @@ npm run dev
 | `SMS_SENDER` | 솔라피에 등록된 발신번호 |
 | `SMS_NOTIFY_TO` | 참여신청 알림 수신번호(쉼표 구분) |
 | `FOLLOWUP_NOTIFY_TO` | 미응답 알림을 받을 연구자 번호(쉼표 구분) |
-| `ANTHROPIC_API_KEY` | (선택) 진료용 요약의 간호 노트 요약 자동 생성. 노트 원문이 Anthropic API로 전송되므로 동의 범위 확인 필요 |
+| `ANTHROPIC_API_KEY` | (선택) 진료용 요약의 연구자 노트 요약 자동 생성. 노트 원문이 Anthropic API로 전송되므로 동의 범위 확인 필요 |
 | `CRON_SECRET` | Vercel Cron이 `/api/cron/reminders`를 호출할 때 쓰는 비밀값 (미설정 시 호출 거부) |
 | `SITE_URL` | (선택) 안내 문자 링크의 기준 주소. 기본값 `https://cancerpatient.vercel.app` |
 

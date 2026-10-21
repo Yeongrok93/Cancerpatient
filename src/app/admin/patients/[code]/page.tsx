@@ -7,7 +7,7 @@ import { adminGetPatientDashboard, adminListPatients, type AdminPatient, type Da
 import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, itemApplies, type Sex, type SurveyItem, type QuestionType } from "@/lib/questions";
 import { computeItemGrade, GRADE_COLORS, GRADE_LABELS } from "@/lib/proctcaeGrading";
 import { patientLabel } from "@/lib/patientLabel";
-import NursingNotes from "./NursingNotes";
+import ResearcherNotes from "./ResearcherNotes";
 
 type ViewMode = "composite" | "raw" | "notes";
 
@@ -42,7 +42,7 @@ function ViewToggle({ view, onChange, rawCount }: { view: ViewMode; onChange: (v
   const options: [ViewMode, string][] = [
     ["composite", "Composite Grade"],
     ["raw", `전체 문항 (${rawCount})`],
-    ["notes", "Nursing Notes"],
+    ["notes", "Researcher Notes"],
   ];
   const index = options.findIndex(([mode]) => mode === view);
   return (
@@ -377,7 +377,7 @@ export default function PatientDashboardPage() {
           )}
 
           {view === "notes" ? (
-            <NursingNotes code={code} />
+            <ResearcherNotes code={code} />
           ) : sessions.length === 0 ? (
             <div className="p-8 text-center text-gray-400 text-sm">완료된 PRO-CTCAE 설문이 없습니다.</div>
           ) : view === "composite" ? (

@@ -1,4 +1,4 @@
-// Stores a hand-written (or Claude Code–written) nursing-notes summary for one patient, so the
+// Stores a hand-written (or Claude Code–written) researcher-notes summary for one patient, so the
 // clinic hand-out can print it without an API key. The summary is tied to the patient's current
 // notes by a hash — if the notes change later, the stored summary stops matching and the report
 // asks for a new one.
@@ -29,7 +29,7 @@ async function main() {
   const rows = await sql`
     SELECT note_date::text AS note_date, body FROM nursing_notes WHERE patient_code = ${code} ORDER BY note_date DESC, created_at DESC
   `;
-  if (rows.length === 0) throw new Error(`참여자번호 ${code}에는 저장된 간호 노트가 없습니다.`);
+  if (rows.length === 0) throw new Error(`참여자번호 ${code}에는 저장된 연구자 노트가 없습니다.`);
   const notes = rows.map((r) => ({ note_date: String(r.note_date), body: String(r.body) }));
 
   await saveNotesSummary(code, notes, text, { model, source: "manual", lang });

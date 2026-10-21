@@ -169,9 +169,9 @@ export async function adminGetPatientDashboard(patientCode: string): Promise<{
   };
 }
 
-// ── Nursing Notes (per patient, free text + date) ───────────────────
+// ── Researcher Notes (per patient, free text + date; stored in the nursing_notes table) ──────────────────
 
-export type NursingNote = {
+export type ResearcherNote = {
   id: string;
   patient_code: string;
   note_date: string; // YYYY-MM-DD
@@ -189,7 +189,7 @@ function cleanNote(date: string, body: string): { date: string; body: string } |
   return { date: d, body: b };
 }
 
-export async function adminListNotes(patientCode: string): Promise<NursingNote[]> {
+export async function adminListNotes(patientCode: string): Promise<ResearcherNote[]> {
   await requireAdmin();
   const code = String(patientCode ?? "").trim();
   if (!code) return [];
@@ -198,14 +198,14 @@ export async function adminListNotes(patientCode: string): Promise<NursingNote[]
     FROM nursing_notes WHERE patient_code = ${code}
     ORDER BY note_date DESC, created_at DESC
   `;
-  return serialize(rows) as NursingNote[];
+  return serialize(rows) as ResearcherNote[];
 }
 
 export async function adminAddNote(
   patientCode: string,
   date: string,
   body: string
-): Promise<{ ok: true; note: NursingNote } | { ok: false; error: string }> {
+): Promise<{ ok: true; note: ResearcherNote } | { ok: false; error: string }> {
   await requireAdmin();
   const code = String(patientCode ?? "").trim();
   const note = cleanNote(date, body);
@@ -217,14 +217,14 @@ export async function adminAddNote(
     VALUES (${code}, ${note.date}::date, ${note.body})
     RETURNING id, patient_code, note_date::text AS note_date, body, created_at, updated_at
   `;
-  return { ok: true, note: serialize([row])[0] as NursingNote };
+  return { ok: true, note: serialize([row])[0] as ResearcherNote };
 }
 
 export async function adminUpdateNote(
   id: string,
   date: string,
   body: string
-): Promise<{ ok: true; note: NursingNote } | { ok: false; error: string }> {
+): Promise<{ ok: true; note: ResearcherNote } | { ok: false; error: string }> {
   await requireAdmin();
   const note = cleanNote(date, body);
   if (!isUuid(id) || !note) return { ok: false, error: "날짜와 내용을 확인해 주세요." };
@@ -234,7 +234,7 @@ export async function adminUpdateNote(
     RETURNING id, patient_code, note_date::text AS note_date, body, created_at, updated_at
   `;
   if (rows.length === 0) return { ok: false, error: "노트를 찾을 수 없습니다." };
-  return { ok: true, note: serialize(rows)[0] as NursingNote };
+  return { ok: true, note: serialize(rows)[0] as ResearcherNote };
 }
 
 export async function adminDeleteNote(id: string): Promise<{ ok: boolean }> {
