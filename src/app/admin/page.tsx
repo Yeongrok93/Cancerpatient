@@ -6,6 +6,7 @@ import {
   adminListPatients,
   adminListParticipants,
   adminSetStudyStartDate,
+  adminSetGender,
   adminSetEnrolled,
   adminAssignPatientCode,
   adminListMessages,
@@ -106,6 +107,15 @@ export default function AdminPage() {
     setParticipants((prev) => prev.map((p) => (p.id === id ? { ...p, patient_code: code.trim() } : p)));
     setAssigningId(null);
     setAssignCode("");
+  }
+
+  async function saveGender(id: string, gender: string) {
+    const res = await adminSetGender(id, gender).catch(() => ({ ok: false }));
+    if (!res.ok) {
+      alert("성별 저장에 실패했습니다.");
+      return;
+    }
+    setParticipants((prev) => prev.map((p) => (p.id === id ? { ...p, gender: (gender || null) as Participant["gender"] } : p)));
   }
 
   async function saveStartDate(id: string, date: string) {
@@ -213,6 +223,7 @@ export default function AdminPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">이름</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">생년월일</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연락처</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" title="성별에 따라 해당 없는 PRO-CTCAE 문항이 자동으로 빠집니다">성별</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연구종류</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">신청일</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">문자알림</th>
@@ -228,6 +239,17 @@ export default function AdminPage() {
                       <td className="px-4 py-3 font-medium text-gray-900">{p.name}</td>
                       <td className="px-4 py-3 font-mono text-gray-600 text-xs">{p.record_or_birth}</td>
                       <td className="px-4 py-3 text-gray-600">{p.contact}</td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={p.gender ?? ""}
+                          onChange={(e) => saveGender(p.id, e.target.value)}
+                          className={`px-2 py-1 border rounded text-xs ${p.gender ? "border-gray-300 text-gray-800" : "border-amber-400 text-amber-800 bg-amber-50"}`}
+                        >
+                          <option value="">미입력</option>
+                          <option value="female">여성</option>
+                          <option value="male">남성</option>
+                        </select>
+                      </td>
                       <td className="px-4 py-3 text-gray-600 text-xs">
                         {p.research_types
                           ? p.research_types.split(",").map((t) => (

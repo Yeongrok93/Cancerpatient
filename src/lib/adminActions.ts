@@ -7,6 +7,7 @@
 import { cookies } from "next/headers";
 import { sql, serialize, isUuid } from "./db";
 import { ADMIN_COOKIE_NAME, isAdminToken } from "./adminAuth";
+import { parseSex, type Sex } from "./questions";
 
 async function requireAdmin() {
   const cookie = (await cookies()).get(ADMIN_COOKIE_NAME)?.value;
@@ -28,6 +29,7 @@ export type AdminParticipant = {
   access_token: string | null;
   enrolled: boolean;
   enrolled_at: string | null;
+  gender: Sex | null;
 };
 
 export type AdminMessage = {
@@ -63,7 +65,7 @@ export async function adminListParticipants(): Promise<AdminParticipant[]> {
   const rows = await sql`
     SELECT id, name, record_or_birth, contact, research_types, consent_agreed, applied_at,
            patient_code, sms_notified, sms_error, study_start_date::text AS study_start_date, access_token,
-           enrolled, enrolled_at
+           enrolled, enrolled_at, gender
     FROM participants ORDER BY applied_at DESC LIMIT 200
   `;
   return serialize(rows) as AdminParticipant[];
@@ -74,6 +76,16 @@ export async function adminAssignPatientCode(id: string, patientCode: string): P
   const code = String(patientCode ?? "").trim();
   if (!isUuid(id) || !code || code.length > 32) return { ok: false };
   await sql`UPDATE participants SET patient_code = ${code} WHERE id = ${id}`;
+  return { ok: true };
+}
+
+/** 성별. Decides which PRO-CTCAE questions are asked. Empty clears it (all questions are then shown). */
+export async function adminSetGender(id: string, gender: string): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const value = String(gender ?? "").trim();
+  const sex = parseSex(value);
+  if (!isUuid(id) || (value !== "" && !sex)) return { ok: false };
+  await sql`UPDATE participants SET gender = ${sex} WHERE id = ${id}`;
   return { ok: true };
 }
 
@@ -129,26 +141,29 @@ export type DashboardAnswer = {
 
 export async function adminGetPatientDashboard(patientCode: string): Promise<{
   name: string;
+  sex: Sex | null;
   sessions: DashboardSession[];
   answers: DashboardAnswer[];
 }> {
   await requireAdmin();
   const [person] = await sql`
-    SELECT name FROM participants WHERE patient_code = ${patientCode} ORDER BY applied_at LIMIT 1
+    SELECT name, gender FROM participants WHERE patient_code = ${patientCode} ORDER BY applied_at LIMIT 1
   `;
   const name = String(person?.name ?? "");
+  const sex = parseSex(person?.gender);
   const sessions = await sql`
     SELECT id, completed_at FROM survey_sessions
     WHERE patient_code = ${patientCode} AND survey_type = 'pro_ctcae' AND is_complete = TRUE
     ORDER BY completed_at ASC
   `;
-  if (sessions.length === 0) return { name, sessions: [], answers: [] };
+  if (sessions.length === 0) return { name, sex, sessions: [], answers: [] };
   const answers = await sql`
     SELECT session_id, item_id, question_key, question_type, answer_value, answer_boolean FROM survey_answers
     WHERE session_id = ANY(${sessions.map((x) => x.id)}::uuid[])
   `;
   return {
     name,
+    sex,
     sessions: serialize(sessions) as DashboardSession[],
     answers: answers as DashboardAnswer[],
   };

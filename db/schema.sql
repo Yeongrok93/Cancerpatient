@@ -148,3 +148,7 @@ CREATE TABLE IF NOT EXISTS note_summaries (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (patient_code, notes_hash, prompt_version)
 );
+
+-- 성별: decides which PRO-CTCAE questions apply (menstrual/vaginal items for women, erection/
+-- ejaculation for men). NULL = not recorded, every question is shown. Set at registration or in /admin.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS gender TEXT CHECK (gender IN ('female', 'male'));

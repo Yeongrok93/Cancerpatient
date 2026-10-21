@@ -3,7 +3,7 @@
 // nursing notes. Pure functions: data in, self-contained printable HTML out
 // (A4, inline SVG; only the Grade boxes are coloured), aimed at a single page.
 
-import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, type SurveyItem, type QuestionType } from "./questions";
+import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, itemApplies, type Sex, type SurveyItem, type QuestionType } from "./questions";
 import { computeItemGrade, GRADE_LABELS } from "./proctcaeGrading";
 import { formatPatientCode } from "./patientLabel";
 import type { NotesSummary } from "./notesSummary";
@@ -23,6 +23,8 @@ export type ReportAnswer = {
 export type ReportInput = {
   code: string;
   name: string;
+  /** Items that do not apply to this sex (e.g. erection items for a woman) are left out entirely. */
+  sex?: Sex | null;
   sessions: ReportSession[]; // completed 증상 설문, oldest first
   answers: ReportAnswer[];
   notes: NotesSummary;
@@ -82,6 +84,7 @@ function buildSeries(input: ReportInput): ItemSeries[] {
   }
   const out: ItemSeries[] = [];
   for (const item of SURVEY_ITEMS) {
+    if (!itemApplies(item.id, input.sex)) continue;
     const values = input.sessions.map((s) => byItemSession.get(`${item.id}|${s.id}`) ?? {});
     const grades = values.map((v) => (Object.keys(v).length ? computeItemGrade(item, v) : null));
     if (grades.some((g) => g !== null)) out.push({ item, grades, values });

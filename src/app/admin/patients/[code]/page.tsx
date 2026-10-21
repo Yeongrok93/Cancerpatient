@@ -4,7 +4,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { adminGetPatientDashboard, adminListPatients, type AdminPatient, type DashboardAnswer, type DashboardSession } from "@/lib/adminActions";
-import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, type SurveyItem, type QuestionType } from "@/lib/questions";
+import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, itemApplies, type Sex, type SurveyItem, type QuestionType } from "@/lib/questions";
 import { computeItemGrade, GRADE_COLORS, GRADE_LABELS } from "@/lib/proctcaeGrading";
 import { patientLabel } from "@/lib/patientLabel";
 import NursingNotes from "./NursingNotes";
@@ -102,6 +102,7 @@ export default function PatientDashboardPage() {
   const code = decodeURIComponent(params.code ?? "");
 
   const [name, setName] = useState("");
+  const [sex, setSex] = useState<Sex | null>(null);
   const [sessions, setSessions] = useState<DashboardSession[]>([]);
   const [answers, setAnswers] = useState<DashboardAnswer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,10 +117,11 @@ export default function PatientDashboardPage() {
       setLoading(true);
       const data = await adminGetPatientDashboard(code).catch((err) => {
         console.error(err);
-        return { name: "", sessions: [], answers: [] };
+        return { name: "", sex: null, sessions: [], answers: [] };
       });
       if (cancelled) return;
       setName(data.name);
+      setSex(data.sex);
       setSessions(data.sessions);
       setAnswers(data.answers);
       setLoading(false);
@@ -159,6 +161,7 @@ export default function PatientDashboardPage() {
     }[] = [];
 
     for (const item of SURVEY_ITEMS) {
+      if (!itemApplies(item.id, sex)) continue; // 해당없음: not graded, not counted
       const bySession = byItem.get(item.id);
       if (!bySession) continue;
       const gradesBySession: Record<string, number | null> = {};
@@ -179,7 +182,7 @@ export default function PatientDashboardPage() {
         a.item.id - b.item.id
     );
     return result;
-  }, [answers, sessions]);
+  }, [answers, sessions, sex]);
 
   // Raw view: the answer to every single question, by week.
   const rawBySessionQuestion = useMemo(() => {
@@ -239,7 +242,9 @@ export default function PatientDashboardPage() {
     if (view === "composite") return exportCompositeCSV();
     const header = ["문항번호", "증상(한국어)", "증상(영문)", "소문항", "유형", ...sessions.map((s, i) => `${weekName(i)}(${formatWeekLabel(s.completed_at)})`)];
     const lines = RAW_QUESTIONS.map(({ item, q }) => {
+      const applies = itemApplies(item.id, sex);
       const cells = sessions.map((s) => {
+        if (!applies) return "해당없음";
         const a = rawBySessionQuestion.get(`${s.id}|${item.id}|${q.key}`);
         return rawTitle(a, q.type).replace(/"/g, '""');
       });
@@ -347,7 +352,7 @@ export default function PatientDashboardPage() {
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
-            <ViewToggle view={view} onChange={setView} rawCount={RAW_QUESTIONS.length} />
+            <ViewToggle view={view} onChange={setView} rawCount={RAW_QUESTIONS.filter(({ item }) => itemApplies(item.id, sex)).length} />
             {view !== "notes" && sessions.length > 0 && (
               <button
                 onClick={exportCSV}
@@ -450,7 +455,17 @@ export default function PatientDashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {SURVEY_ITEMS.map((item) => (
+                  {SURVEY_ITEMS.map((item) =>
+                    !itemApplies(item.id, sex) ? (
+                      <tr key={item.id} className="border-t-2 border-gray-200 bg-gray-50">
+                        <td className="px-3 py-2 sticky left-0 bg-gray-50 z-10 min-w-[220px] max-w-[300px] text-sm text-gray-400">
+                          {item.id}. {item.termKo}
+                        </td>
+                        <td colSpan={sessions.length} className="px-3 py-2 text-xs text-gray-500">
+                          해당없음 ({sex === "female" ? "여성" : "남성"}에게는 묻지 않는 문항)
+                        </td>
+                      </tr>
+                    ) : (
                     <Fragment key={item.id}>
                       {/* 증상 항목: 한 줄을 통째로 차지 */}
                       <tr className="border-t-2 border-gray-200 bg-gray-50">
@@ -491,7 +506,8 @@ export default function PatientDashboardPage() {
                         </tr>
                       ))}
                     </Fragment>
-                  ))}
+                    )
+                  )}
                 </tbody>
               </table>
             </div>

@@ -1309,10 +1309,42 @@ export const SURVEY_ITEMS: SurveyItem[] = [
 
 export const CATEGORIES = [...new Set(SURVEY_ITEMS.map((item) => item.category))];
 
-export function getTotalQuestionCount(): number {
-  return SURVEY_ITEMS.reduce((sum, item) => sum + item.questions.length, 0);
+export type Sex = "female" | "male";
+
+export function parseSex(value: unknown): Sex | null {
+  return value === "female" || value === "male" ? value : null;
 }
 
-export function getItemsByCategory(category: string): SurveyItem[] {
-  return SURVEY_ITEMS.filter((item) => item.category === category);
+/** Items that only make sense for one sex (menstrual / vaginal symptoms, erection, ejaculation). */
+export const SEX_SPECIFIC_ITEM_IDS: Record<number, Sex> = {
+  57: "female", // 불규칙한 생리 또는 질 출혈
+  58: "female", // 생리 결여
+  59: "female", // 질 분비물
+  60: "female", // 질 건조
+  66: "male", // 발기 유지 어려움
+  67: "male", // 사정 어려움
+};
+
+/** Whether an item is asked of / counted for this sex. Unknown sex (null) keeps every item. */
+export function itemApplies(itemId: number, sex: Sex | null | undefined): boolean {
+  const only = SEX_SPECIFIC_ITEM_IDS[itemId];
+  return !only || !sex || only === sex;
+}
+
+export function getItemsFor(sex?: Sex | null): SurveyItem[] {
+  return SURVEY_ITEMS.filter((item) => itemApplies(item.id, sex));
+}
+
+/** Categories that still have at least one item for this sex (a man has no 생식기계 section). */
+export function getCategoriesFor(sex?: Sex | null): string[] {
+  const used = new Set(getItemsFor(sex).map((item) => item.category));
+  return CATEGORIES.filter((c) => used.has(c));
+}
+
+export function getTotalQuestionCount(sex?: Sex | null): number {
+  return getItemsFor(sex).reduce((sum, item) => sum + item.questions.length, 0);
+}
+
+export function getItemsByCategory(category: string, sex?: Sex | null): SurveyItem[] {
+  return getItemsFor(sex).filter((item) => item.category === category);
 }

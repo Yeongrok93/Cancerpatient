@@ -7,7 +7,7 @@
 // the same trust model the Supabase version had.
 
 import { sql, isUuid } from "./db";
-import { SURVEY_ITEMS } from "./questions";
+import { SURVEY_ITEMS, SEX_SPECIFIC_ITEM_IDS, itemApplies, parseSex, type Sex } from "./questions";
 import { QLQ_QUESTIONS } from "./qlq-c30";
 import { sendSms } from "./solapi";
 import { headers } from "next/headers";
@@ -86,22 +86,25 @@ export async function registerParticipant(input: {
   recordOrBirth: string;
   contact: string;
   researchTypes: string[];
+  gender: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   const name = String(input?.name ?? "").trim().slice(0, 100);
   const recordOrBirth = String(input?.recordOrBirth ?? "").trim().slice(0, 50);
   const contact = String(input?.contact ?? "").trim().slice(0, 50);
   const researchTypes = (Array.isArray(input?.researchTypes) ? input.researchTypes : [])
     .filter((t) => t === "설문조사" || t === "면담");
+  const gender = parseSex(input?.gender);
   if (!name || !recordOrBirth || !contact || researchTypes.length === 0) {
     return { ok: false, error: "필수 항목이 비어 있습니다." };
   }
+  if (!gender) return { ok: false, error: "성별을 선택해 주세요." };
   if (!rateLimit(`register:${await callerIp()}`, 5, 60 * 60 * 1000)) {
     return { ok: false, error: "신청 횟수가 너무 많습니다. 잠시 후 다시 시도해 주세요." };
   }
 
   const [row] = await sql`
-    INSERT INTO participants (name, record_or_birth, contact, research_types, consent_agreed)
-    VALUES (${name}, ${recordOrBirth}, ${contact}, ${researchTypes.join(",")}, TRUE)
+    INSERT INTO participants (name, record_or_birth, contact, research_types, consent_agreed, gender)
+    VALUES (${name}, ${recordOrBirth}, ${contact}, ${researchTypes.join(",")}, TRUE, ${gender})
     RETURNING id
   `;
 
@@ -277,6 +280,17 @@ export async function getSessionPatientCode(sessionId: string): Promise<string |
 
 // ── PRO-CTCAE ────────────────────────────────────────────────────
 
+/** The participant's sex for this session (from participants.gender); null if not recorded. */
+async function sexForSession(sessionId: string): Promise<Sex | null> {
+  const rows = await sql`
+    SELECT (SELECT p.gender FROM participants p
+            WHERE p.patient_code = s.patient_code AND p.gender IS NOT NULL
+            ORDER BY p.applied_at LIMIT 1) AS gender
+    FROM survey_sessions s WHERE s.id = ${sessionId}
+  `;
+  return parseSex(rows[0]?.gender);
+}
+
 export type ProCtcaeAnswer = { item_id: number; question_key: string; value: number | boolean };
 
 const PRO_QUESTIONS = new Map(
@@ -285,7 +299,7 @@ const PRO_QUESTIONS = new Map(
 
 export async function loadProCtcaeSession(
   sessionId: string
-): Promise<{ status: "ok"; answers: ProCtcaeAnswer[] } | { status: "complete" | "not_found" }> {
+): Promise<{ status: "ok"; answers: ProCtcaeAnswer[]; sex: Sex | null } | { status: "complete" | "not_found" }> {
   const open = await getOpenSession(sessionId, "pro_ctcae");
   if (open.error) return { status: open.error };
   const rows = await sql`
@@ -294,6 +308,7 @@ export async function loadProCtcaeSession(
   `;
   return {
     status: "ok",
+    sex: await sexForSession(sessionId),
     answers: rows.map((r) => ({
       item_id: r.item_id,
       question_key: r.question_key,
@@ -311,11 +326,13 @@ export async function saveProCtcaeAnswers(
   const open = await getOpenSession(sessionId, "pro_ctcae");
   if (open.error) return { ok: false, error: open.error };
 
+  const sex = await sexForSession(sessionId);
   const itemIds: number[] = [], keys: string[] = [], terms: string[] = [], types: string[] = [];
   const values: (number | null)[] = [], booleans: (boolean | null)[] = [];
   for (const a of answers) {
     const entry = PRO_QUESTIONS.get(`${a?.item_id}-${a?.question_key}`);
     if (!entry) return { ok: false, error: "unknown question" };
+    if (!itemApplies(entry.item.id, sex)) continue; // e.g. erection items for a woman
     const presence = entry.q.type === "presence";
     const valid = presence
       ? typeof a.value === "boolean"
@@ -362,8 +379,14 @@ export async function submitProCtcae(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const open = await getOpenSession(sessionId, "pro_ctcae");
   if (open.error) return { ok: false, error: open.error };
-  const [{ n }] = await sql`SELECT count(*)::int AS n FROM survey_answers WHERE session_id = ${sessionId}`;
-  if (n < PRO_QUESTIONS.size) return { ok: false, error: "incomplete" };
+  const sex = await sexForSession(sessionId);
+  const required = [...PRO_QUESTIONS.values()].filter(({ item }) => itemApplies(item.id, sex)).length;
+  const excludedItemIds = Object.keys(SEX_SPECIFIC_ITEM_IDS).map(Number).filter((id) => !itemApplies(id, sex));
+  const [{ n }] = await sql`
+    SELECT count(*)::int AS n FROM survey_answers
+    WHERE session_id = ${sessionId} AND item_id <> ALL(${excludedItemIds}::int[])
+  `;
+  if (n < required) return { ok: false, error: "incomplete" };
   const comment = String(additionalComment ?? "").trim().slice(0, 5000) || null;
   await sql`
     UPDATE survey_sessions SET is_complete = TRUE, completed_at = NOW(), additional_comments = ${comment}

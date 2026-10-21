@@ -11,9 +11,11 @@ import {
 } from "@/lib/actions";
 import {
   SURVEY_ITEMS,
-  CATEGORIES,
+  getCategoriesFor,
   getItemsByCategory,
   getTotalQuestionCount,
+  itemApplies,
+  type Sex,
   SurveyItem,
   QuestionType,
 } from "@/lib/questions";
@@ -52,6 +54,8 @@ function SurveyContent() {
   const [loadFailed, setLoadFailed] = useState(false);
   const [resumed, setResumed] = useState(false);
   const [categoryIdx, setCategoryIdx] = useState(0);
+  // Sex-specific questions (menstrual, erection…) are left out for the other sex.
+  const [sex, setSex] = useState<Sex | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -59,11 +63,14 @@ function SurveyContent() {
   const [additionalComment, setAdditionalComment] = useState("");
   const firstErrorRef = useRef<HTMLDivElement>(null);
 
-  const totalQuestions = getTotalQuestionCount();
-  const answeredCount = Object.values(answers).filter((v) => !isUnanswered(v)).length;
+  const categories = getCategoriesFor(sex);
+  const totalQuestions = getTotalQuestionCount(sex);
+  const answeredCount = Object.entries(answers).filter(
+    ([key, v]) => !isUnanswered(v) && itemApplies(Number(key.split("-")[0]), sex)
+  ).length;
 
-  const currentCategory = CATEGORIES[categoryIdx];
-  const currentItems = getItemsByCategory(currentCategory);
+  const currentCategory = categories[categoryIdx];
+  const currentItems = getItemsByCategory(currentCategory, sex);
 
   // Load whatever was already saved for this session so a patient who left
   // mid-survey picks up where they stopped.
@@ -91,13 +98,16 @@ function SurveyContent() {
       res.answers.forEach((r) => {
         map[buildAnswerKey(r.item_id, r.question_key)] = r.value;
       });
-      const firstOpen = CATEGORIES.findIndex((cat) =>
-        getItemsByCategory(cat).some((item) =>
+      const loadedSex = res.sex ?? null;
+      const cats = getCategoriesFor(loadedSex);
+      const firstOpen = cats.findIndex((cat) =>
+        getItemsByCategory(cat, loadedSex).some((item) =>
           item.questions.some((q) => isUnanswered(map[buildAnswerKey(item.id, q.key)]))
         )
       );
       setAnswers(map);
-      setCategoryIdx(firstOpen === -1 ? CATEGORIES.length - 1 : firstOpen);
+      setSex(loadedSex);
+      setCategoryIdx(firstOpen === -1 ? cats.length - 1 : firstOpen);
       setResumed(Object.keys(map).length > 0);
       setLoaded(true);
     })();
@@ -260,9 +270,9 @@ function SurveyContent() {
       setErrorItemIds(ids);
       return;
     }
-    const firstOpen = CATEGORIES.findIndex((cat) => getUnansweredItems(getItemsByCategory(cat)).length > 0);
+    const firstOpen = categories.findIndex((cat) => getUnansweredItems(getItemsByCategory(cat, sex)).length > 0);
     if (firstOpen !== -1) {
-      alert(`'${CATEGORIES[firstOpen]}' 영역에 답하지 않은 문항이 있어요. 해당 영역으로 이동합니다.`);
+      alert(`'${categories[firstOpen]}' 영역에 답하지 않은 문항이 있어요. 해당 영역으로 이동합니다.`);
       setCategoryIdx(firstOpen);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -280,7 +290,7 @@ function SurveyContent() {
     }
   }
 
-  const isLast = categoryIdx === CATEGORIES.length - 1;
+  const isLast = categoryIdx === categories.length - 1;
   const unansweredCount = getUnansweredItems(currentItems).length;
 
   let firstErrorSet = false;
@@ -323,7 +333,7 @@ function SurveyContent() {
         <div className="flex items-end justify-between gap-3">
           <div>
             <p className="text-base text-gray-700">
-              전체 {CATEGORIES.length}개 영역 중 {categoryIdx + 1}번째
+              전체 {categories.length}개 영역 중 {categoryIdx + 1}번째
             </p>
             <p className="text-xl font-bold text-gray-900">{currentCategory}</p>
           </div>
@@ -333,8 +343,8 @@ function SurveyContent() {
           답변은 누르실 때마다 자동 저장됩니다. 중간에 나가셔도 다시 들어오시면 이어서 하실 수 있어요.
         </p>
         <div className="hidden sm:flex gap-1.5 flex-wrap">
-          {CATEGORIES.map((cat, i) => {
-            const items = getItemsByCategory(cat);
+          {categories.map((cat, i) => {
+            const items = getItemsByCategory(cat, sex);
             const done = items.every((item) =>
               item.questions.every((q) => !isUnanswered(answers[buildAnswerKey(item.id, q.key)]))
             );

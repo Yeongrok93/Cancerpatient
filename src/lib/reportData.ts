@@ -5,6 +5,7 @@
 import { createHash } from "crypto";
 import { sql } from "./db";
 import { getNotesSummary, type NotesSummary } from "./notesSummary";
+import { parseSex, type Sex } from "./questions";
 import { REPORT_TEMPLATE_VERSION, type ReportAnswer, type ReportInput, type ReportSession } from "./report";
 
 const SAMPLE_NOTES = [
@@ -22,7 +23,7 @@ export type LoadReportOptions = {
 };
 
 /** Short fingerprint of what is printed, so two copies can be compared at a glance. */
-function dataId(code: string, sessions: ReportSession[], answers: ReportAnswer[], notes: NotesSummary): string {
+function dataId(code: string, sex: Sex | null, sessions: ReportSession[], answers: ReportAnswer[], notes: NotesSummary): string {
   const canonAnswers = answers
     .map((a) => `${a.session_id}|${a.item_id}|${a.question_key}|${a.answer_value ?? ""}`)
     .sort();
@@ -30,6 +31,7 @@ function dataId(code: string, sessions: ReportSession[], answers: ReportAnswer[]
   const payload = JSON.stringify({
     v: REPORT_TEMPLATE_VERSION,
     code,
+    sex,
     sessions: sessions.map((s) => `${s.id}|${s.completed_at}`),
     answers: canonAnswers,
     summary: summaryText,
@@ -38,7 +40,7 @@ function dataId(code: string, sessions: ReportSession[], answers: ReportAnswer[]
 }
 
 export async function loadReportInput(code: string, opts: LoadReportOptions = {}): Promise<ReportInput | null> {
-  const [person] = await sql`SELECT name FROM participants WHERE patient_code = ${code} ORDER BY applied_at LIMIT 1`;
+  const [person] = await sql`SELECT name, gender FROM participants WHERE patient_code = ${code} ORDER BY applied_at LIMIT 1`;
   if (!person) return null;
 
   const sessions = (
@@ -69,14 +71,16 @@ export async function loadReportInput(code: string, opts: LoadReportOptions = {}
     ? { kind: "sample", text: SAMPLE_NOTES }
     : await getNotesSummary(code, noteRows.map((n) => ({ note_date: String(n.note_date), body: String(n.body) })));
 
+  const sex = parseSex(person.gender);
   return {
     code,
     name: String(person.name ?? ""),
+    sex,
     sessions,
     answers,
     notes,
     generatedAt: opts.asOf,
     autoPrint: opts.autoPrint,
-    dataId: dataId(code, sessions, answers, notes),
+    dataId: dataId(code, sex, sessions, answers, notes),
   };
 }

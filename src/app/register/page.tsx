@@ -12,10 +12,11 @@ export default function RegisterPage() {
   const [name, setName]               = useState("");
   const [recordOrBirth, setRecordOrBirth] = useState("");
   const [contact, setContact]         = useState("");
+  const [gender, setGender]           = useState<"female" | "male" | "">("");
   const [researchTypes, setResearchTypes] = useState<string[]>([]);
   const [consent, setConsent]         = useState(false);
 
-  const [errors, setErrors] = useState<Partial<Record<"name" | "recordOrBirth" | "contact" | "researchTypes" | "consent", string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<"name" | "recordOrBirth" | "contact" | "researchTypes" | "consent" | "gender", string>>>({});
 
   function toggleResearchType(type: string) {
     setResearchTypes((prev) =>
@@ -28,6 +29,7 @@ export default function RegisterPage() {
     const e: typeof errors = {};
     if (!name.trim())             e.name          = "이름을 입력해 주세요.";
     if (!recordOrBirth.trim())    e.recordOrBirth = "생년월일을 입력해 주세요.";
+    if (!gender)                  e.gender        = "성별을 선택해 주세요.";
     if (!contact.trim())          e.contact       = "연락처를 입력해 주세요.";
     if (researchTypes.length === 0) e.researchTypes = "연구 종류를 하나 이상 선택해 주세요.";
     if (!consent)                 e.consent       = "개인정보 제공에 동의해 주세요.";
@@ -46,6 +48,7 @@ export default function RegisterPage() {
         recordOrBirth: recordOrBirth.trim(),
         contact: contact.trim(),
         researchTypes,
+        gender,
       });
       if (!result.ok) throw new Error(result.error);
 
@@ -118,6 +121,28 @@ export default function RegisterPage() {
             className={inputCls(!!errors.recordOrBirth)}
           />
         </Field>
+
+        {/* 성별 */}
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-gray-700">성별</p>
+          <div className={`flex gap-2 rounded-xl border-2 p-3 transition-colors ${errors.gender ? "border-red-300 bg-red-50" : "border-gray-200"}`}>
+            {([["female", "여성"], ["male", "남성"]] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => { setGender(value); setErrors((p) => ({ ...p, gender: undefined })); }}
+                className={`flex-1 px-3 py-2 rounded-lg border text-sm transition-all ${
+                  gender === value
+                    ? "bg-primary-600 border-primary-600 text-white font-semibold"
+                    : "bg-white border-gray-200 text-gray-600 hover:border-primary-300"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {errors.gender && <p className="text-xs text-red-500 pl-1">{errors.gender}</p>}
+        </div>
 
         {/* 연구종류 */}
         <div className="space-y-1">
