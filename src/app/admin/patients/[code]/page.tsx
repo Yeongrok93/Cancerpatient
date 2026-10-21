@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { adminGetPatientDashboard, adminListPatients, type AdminPatient, type DashboardAnswer, type DashboardSession } from "@/lib/adminActions";
@@ -386,36 +386,47 @@ export default function PatientDashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {RAW_QUESTIONS.map(({ item, q, first }) => (
-                    <tr key={`${item.id}-${q.key}`} className={`hover:bg-gray-50 ${first ? "border-t-2 border-gray-200" : ""}`}>
-                      <td className="px-3 py-1.5 sticky left-0 bg-white z-10 whitespace-nowrap" title={q.text}>
-                        <span className="text-gray-800 font-medium">
-                          {first ? `${item.id}. ${item.termKo}` : ""}
-                        </span>
-                        <span className={`text-[11px] text-gray-400 ${first ? "ml-2" : "ml-6"}`}>{TYPE_LABEL[q.type]}</span>
-                      </td>
-                      {sessions.map((s) => {
-                        const a = rawBySessionQuestion.get(`${s.id}|${item.id}|${q.key}`);
-                        const isPresence = q.type === "presence";
-                        const color = !a
-                          ? "bg-gray-50 text-gray-300"
-                          : isPresence
-                            ? a.answer_boolean
-                              ? "bg-amber-200 text-amber-900"
-                              : "bg-gray-100 text-gray-500"
-                            : RAW_COLORS[a.answer_value ?? 0];
-                        return (
-                          <td key={s.id} className="px-2 py-1.5 text-center">
-                            <span
-                              title={rawTitle(a, q.type)}
-                              className={`inline-flex min-w-9 h-8 px-1.5 items-center justify-center rounded-lg text-xs font-bold cursor-default ${color}`}
-                            >
-                              {rawLabel(a, q.type)}
-                            </span>
+                  {SURVEY_ITEMS.map((item) => (
+                    <Fragment key={item.id}>
+                      {/* 증상 항목: 한 줄을 통째로 차지 */}
+                      <tr className="border-t-2 border-gray-200 bg-gray-50">
+                        <td className="px-3 py-2 sticky left-0 bg-gray-50 z-10 min-w-[220px] max-w-[300px] text-sm font-semibold text-gray-900">
+                          {item.id}. {item.termKo}
+                        </td>
+                        {sessions.map((s) => (
+                          <td key={s.id} />
+                        ))}
+                      </tr>
+                      {/* 측정 수준(빈도·심각도·일상생활 영향…): 아래 줄, 들여쓰기 */}
+                      {item.questions.map((q) => (
+                        <tr key={`${item.id}-${q.key}`} className="hover:bg-gray-50">
+                          <td className="pl-8 pr-3 py-1.5 sticky left-0 bg-white z-10 whitespace-nowrap text-sm text-gray-900" title={q.text}>
+                            {TYPE_LABEL[q.type]}
                           </td>
-                        );
-                      })}
-                    </tr>
+                          {sessions.map((s) => {
+                            const a = rawBySessionQuestion.get(`${s.id}|${item.id}|${q.key}`);
+                            const isPresence = q.type === "presence";
+                            const color = !a
+                              ? "bg-gray-50 text-gray-300"
+                              : isPresence
+                                ? a.answer_boolean
+                                  ? "bg-amber-200 text-amber-900"
+                                  : "bg-gray-100 text-gray-500"
+                                : RAW_COLORS[a.answer_value ?? 0];
+                            return (
+                              <td key={s.id} className="px-2 py-1.5 text-center">
+                                <span
+                                  title={rawTitle(a, q.type)}
+                                  className={`inline-flex min-w-9 h-8 px-1.5 items-center justify-center rounded-lg text-xs font-bold cursor-default ${color}`}
+                                >
+                                  {rawLabel(a, q.type)}
+                                </span>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
