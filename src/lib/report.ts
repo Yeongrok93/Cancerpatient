@@ -1,7 +1,7 @@
 // Clinic hand-out ("진료용 요약"): the symptoms a doctor should look at first —
 // Grade 3 now, or Grade higher than at the previous survey — plus a summary of the
 // nursing notes. Pure functions: data in, self-contained printable HTML out
-// (A4, grayscale, inline SVG), aimed at a single page.
+// (A4, inline SVG; only the Grade boxes are coloured), aimed at a single page.
 
 import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, type SurveyItem, type QuestionType } from "./questions";
 import { computeItemGrade, GRADE_LABELS } from "./proctcaeGrading";
@@ -91,11 +91,13 @@ function buildSeries(input: ReportInput): ItemSeries[] {
 
 // ── visuals (inline SVG / CSS, grayscale) ────────────────────────────────
 
+// Same grade colours as the admin dashboard (muted amber → orange → red); the number stays in the box,
+// so the grade is still readable on a black-and-white print.
 const FILL: Record<number, { bg: string; fg: string }> = {
   0: { bg: "#ffffff", fg: "#666666" },
-  1: { bg: "#d9d9d9", fg: "#111111" },
-  2: { bg: "#8c8c8c", fg: "#ffffff" },
-  3: { bg: "#111111", fg: "#ffffff" },
+  1: { bg: "#fde68a", fg: "#78350f" },
+  2: { bg: "#fb923c", fg: "#111111" },
+  3: { bg: "#dc2626", fg: "#ffffff" },
 };
 
 function gradeBox(g: number | null): string {
