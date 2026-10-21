@@ -5,7 +5,7 @@
 
 import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, type SurveyItem, type QuestionType } from "./questions";
 import { computeItemGrade, GRADE_LABELS } from "./proctcaeGrading";
-import { patientLabel } from "./patientLabel";
+import { formatPatientCode } from "./patientLabel";
 import type { NotesSummary } from "./notesSummary";
 
 /** Bump when the layout or wording of the document changes. Printed in the footer. */
@@ -44,6 +44,12 @@ const TYPE_SHORT: Record<QuestionType, string> = {
 };
 
 const MAX_TREND_ROWS = 8;
+
+/** Printed in the footer. The title is the one on the participant-facing start page. */
+const STUDY_TITLE = "외래기반 항체-약물 접합체(ADC) 치료를 받는 암 환자의 증상 부담 연구";
+const PRINCIPAL_INVESTIGATOR = "연구책임자 서울대병원 김혜진 수간호사";
+/** Basch E, et al. Clin Trials 2021;18(1):104-114 (PMID 33258687). */
+const GRADING_CITATION = "PRO-CTCAE Composite Grading Algorithm (Basch et al., 2021)";
 
 const esc = (s: unknown) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -181,9 +187,7 @@ function notesHtml(notes: NotesSummary): string {
   const meta =
     notes.kind === "sample"
       ? `<p class="sample">샘플 문구입니다 — 이 환자의 실제 노트가 아니며 화면 구성을 보기 위한 예시입니다.</p>`
-      : `<p class="metaline">간호 노트를 AI(${esc(notes.model)})로 요약한 내용입니다${notes.source === "manual" ? " (연구자 확인·저장)" : ""} · ${esc(
-          kstDate(new Date(notes.createdAt)).replace(/-/g, ".")
-        )} · 원문과 다를 수 있습니다.</p>`;
+      : "";
   return `<ul class="notes">${items}</ul>${meta}`;
 }
 
@@ -192,12 +196,12 @@ function notesHtml(notes: NotesSummary): string {
 export function renderReportHtml(input: ReportInput): string {
   const { sessions } = input;
   const generatedAt = input.generatedAt ?? new Date();
+  const displayName = input.name.trim() || formatPatientCode(input.code);
   const series = buildSeries(input);
   const last = sessions.length - 1;
   const showSpark = sessions.length >= 3;
 
   const prevLabel = last >= 1 ? `${weekName(last - 1)} (${mmdd(sessions[last - 1].completed_at)})` : null;
-  const curLabel = last >= 0 ? `${weekName(last)} (${mmdd(sessions[last].completed_at)})` : "";
 
   const rows = series.map((it) => {
     const cur = last >= 0 ? it.grades[last] : null;
@@ -252,17 +256,12 @@ export function renderReportHtml(input: ReportInput): string {
     sessions.length === 0
       ? `<p class="muted">완료된 증상 설문이 없습니다.</p>`
       : `
-    <section class="summary">
-      <div class="stat"><b>${sessions.length}회</b> 완료한 증상 설문</div>
-      <div class="stat"><b>${grade3Rows.length}개</b> 현재 Grade 3 (중증)</div>
-      <div class="stat"><b>${prevLabel ? `${rows.filter((r) => r.increased).length}개` : "—"}</b> 이전 설문보다 증가</div>
-    </section>
-    <div class="legend">${legend()}<span class="muted">기준 ${esc(curLabel)}${prevLabel ? ` · 비교 ${esc(prevLabel)}` : " · 이전 설문 없음"} · 칸은 이전 → 현재 · PRO-CTCAE 복합 등급</span></div>
+    <div class="legend">${legend()}<span class="muted">${GRADING_CITATION}</span></div>
 
-    <h2>1. 현재 Grade 3 (중증) 증상 <span class="cnt">${grade3Rows.length}개</span></h2>
+    <h2>1. 현재 Grade 3 (중증) 증상</h2>
     ${grade3Rows.length === 0 ? `<p class="none">해당하는 증상이 없습니다.</p>` : columnsHtml(grade3Rows, true)}
 
-    <h2>2. 이전 설문보다 Grade가 올라간 증상 <span class="cnt">${upRows.length}개 · Grade 3 제외</span></h2>
+    <h2>2. 이전 설문보다 Grade가 올라간 증상</h2>
     ${!prevLabel ? `<p class="none">이전 설문이 없어 비교할 수 없습니다.</p>` : upRows.length === 0 ? `<p class="none">해당하는 증상이 없습니다.</p>` : chipRowsHtml(upRows)}
 
     <h2>3. 증상 부담 추이 <span class="cnt">설문별 Grade별 증상 수${sessions.length > MAX_TREND_ROWS ? ` · 최근 ${MAX_TREND_ROWS}회` : ""}</span></h2>
@@ -272,8 +271,10 @@ export function renderReportHtml(input: ReportInput): string {
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>${esc(patientLabel(input.code, input.name))} 진료용 요약</title>
+<title>${esc(displayName)} PRO-CTCAE 증상 설문 요약</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="report-data-id" content="${esc(input.dataId ?? "")}">
+<meta name="report-template" content="v${REPORT_TEMPLATE_VERSION}">
 <style>
   @page { size: A4; margin: 9mm 12mm 10mm; }
   * { box-sizing: border-box; }
@@ -282,14 +283,10 @@ export function renderReportHtml(input: ReportInput): string {
   .page { max-width: 184mm; margin: 0 auto; padding: 6mm 0; }
   header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; border-bottom: 2px solid #111; padding-bottom: 5px; margin-bottom: 8px; }
   header .ttl { font-size: 14.5pt; font-weight: 700; letter-spacing: -0.2px; line-height: 1.2; }
-  header .sub { font-size: 8.5pt; color: #333; margin-top: 1px; }
   header .who { text-align: right; font-size: 9pt; white-space: nowrap; } header .who b { font-size: 11pt; }
   h2 { font-size: 10pt; margin: 9px 0 3px; padding-bottom: 2px; border-bottom: 1px solid #999; }
   h2 .cnt { font-weight: 400; font-size: 8.5pt; color: #555; margin-left: 6px; }
   .muted { color: #555; } p.muted { margin: 2px 0; }
-  .summary { display: flex; border: 1px solid #111; }
-  .stat { flex: 1; padding: 4px 8px; text-align: center; border-right: 1px solid #111; font-size: 8.5pt; color: #333; }
-  .stat:last-child { border-right: 0; } .stat b { font-size: 12pt; color: #111; margin-right: 3px; }
   .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; margin: 5px 0 0; font-size: 8pt; }
   .lg { display: inline-flex; align-items: center; }
   .cols { column-count: 2; column-gap: 7mm; column-rule: 1px solid #e3e3e3; }
@@ -312,10 +309,9 @@ export function renderReportHtml(input: ReportInput): string {
   .none { padding: 6px; border: 1px dashed #999; text-align: center; margin: 3px 0; }
   svg text { font-family: inherit; }
   ul.notes { margin: 3px 0 0; padding-left: 16px; } ul.notes li { margin: 2px 0; }
-  .metaline { margin: 4px 0 0; font-size: 7.5pt; color: #666; }
   .sample { border: 1px dashed #111; padding: 3px 7px; font-size: 8pt; margin: 4px 0 0; }
   section.notes-block { break-inside: avoid; }
-  footer { margin-top: 10px; padding-top: 4px; border-top: 1px solid #999; font-size: 7.5pt; color: #555; display: flex; justify-content: space-between; gap: 12px; }
+  footer { margin-top: 12px; padding-top: 5px; border-top: 1px solid #999; font-size: 8pt; color: #333; display: flex; justify-content: space-between; gap: 12px; }
   .bar { position: sticky; top: 0; background: #111; color: #fff; padding: 8px 14px; font-size: 10pt; display: flex; justify-content: space-between; align-items: center; }
   .bar button { font: inherit; padding: 4px 12px; border: 1px solid #fff; background: #fff; color: #111; cursor: pointer; }
   @media print { .bar { display: none; } .page { padding: 0; max-width: none; } }
@@ -325,11 +321,8 @@ export function renderReportHtml(input: ReportInput): string {
 ${input.autoPrint ? `<div class="bar"><span>인쇄 창에서 대상을 “PDF로 저장”으로 선택하세요.</span><button onclick="window.print()">인쇄 / PDF 저장</button></div>` : ""}
 <div class="page">
   <header>
-    <div>
-      <div class="ttl">진료 참고 자료 · 증상 설문 요약</div>
-      <div class="sub">외래기반 항체-약물 접합체(ADC) 치료 환자 증상 부담 연구 (PRO-CTCAE)</div>
-    </div>
-    <div class="who"><b>${esc(patientLabel(input.code, input.name))}</b><br>작성일 ${esc(kstDate(generatedAt).replace(/-/g, "."))}</div>
+    <div class="ttl">PRO-CTCAE 증상 설문 요약</div>
+    <div class="who"><b>${esc(displayName)}</b><br>작성일 ${esc(kstDate(generatedAt).replace(/-/g, "."))}</div>
   </header>
 
   ${body}
@@ -340,8 +333,8 @@ ${input.autoPrint ? `<div class="bar"><span>인쇄 창에서 대상을 “PDF로
   </section>
 
   <footer>
-    <span>환자가 직접 응답한 설문과 연구 간호사의 기록을 정리한 자료이며, 진단이나 치료 지침이 아닙니다.</span>
-    <span>자료 ID ${esc(input.dataId ?? "—")} · 양식 v${REPORT_TEMPLATE_VERSION}</span>
+    <span>${esc(STUDY_TITLE)}</span>
+    <span>${esc(PRINCIPAL_INVESTIGATOR)}</span>
   </footer>
 </div>
 ${input.autoPrint ? `<script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 400); });</script>` : ""}
