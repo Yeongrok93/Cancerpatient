@@ -60,6 +60,27 @@ async function patientExists(code: string) {
   return rows.length > 0;
 }
 
+// Skips invalid numbers, and a number that already applied in the last 24 hours, so the
+// public form can't be used to text arbitrary people repeatedly.
+async function sendApplicantConfirmation(participantId: string, name: string, contact: string) {
+  const phone = contact.replace(/\D/g, "");
+  if (!/^01\d{8,9}$/.test(phone)) return;
+  const sender = (process.env.SMS_SENDER ?? "").trim();
+  if (!sender) return;
+  const [recent] = await sql`
+    SELECT 1 FROM participants
+    WHERE regexp_replace(contact, '\\D', '', 'g') = ${phone}
+      AND id <> ${participantId} AND applied_at > NOW() - INTERVAL '24 hours'
+    LIMIT 1
+  `;
+  if (recent) return;
+  await sendSms({
+    to: phone,
+    from: sender,
+    text: `${name}님, 연구 참여 신청이 접수되었습니다. 연구팀에서 곧 연락드리겠습니다. 감사합니다.`,
+  });
+}
+
 export async function registerParticipant(input: {
   name: string;
   recordOrBirth: string;
@@ -99,6 +120,13 @@ export async function registerParticipant(input: {
     console.error("Failed to send registration SMS:", err);
     const message = err instanceof Error ? err.message.slice(0, 500) : "unknown error";
     await sql`UPDATE participants SET sms_notified = FALSE, sms_error = ${message} WHERE id = ${row.id}`;
+  }
+
+  // Tell the applicant the request arrived. Best effort: it never fails the registration.
+  try {
+    await sendApplicantConfirmation(row.id, name, contact);
+  } catch (err) {
+    console.error("Failed to send applicant confirmation SMS:", err);
   }
   return { ok: true };
 }

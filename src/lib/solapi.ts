@@ -43,5 +43,18 @@ export async function sendSms({ to, from, text }: { to: string | string[]; from:
   if (!res.ok) {
     throw new Error(`Solapi request failed (${res.status}): ${JSON.stringify(body)}`);
   }
+  // send-many answers 200 even when individual recipients fail; the failures are
+  // listed in the body. Treat any of them as an error so they are recorded and retried
+  // (numbers are masked because the message ends up in the admin screen).
+  const failedList: { to?: string; statusMessage?: string; statusCode?: string }[] = Array.isArray(body?.failedMessageList)
+    ? body.failedMessageList
+    : [];
+  const registeredFailed = Number(body?.groupInfo?.count?.registeredFailed ?? 0);
+  if (failedList.length > 0 || registeredFailed > 0) {
+    const detail = failedList
+      .map((f) => `${String(f.to ?? "").slice(-4) || "?"}: ${f.statusMessage ?? f.statusCode ?? "실패"}`)
+      .join(", ");
+    throw new Error(`Solapi 일부 발송 실패 (${failedList.length || registeredFailed}건) ${detail}`.trim());
+  }
   return body;
 }
