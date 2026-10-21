@@ -258,7 +258,17 @@ export default function PatientDashboardPage() {
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <h1 className="text-xl font-bold text-gray-900">{patientLabel(code, name)}</h1>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-xl font-bold text-gray-900">{patientLabel(code, name)}</h1>
+            <a
+              href={`/api/admin/report/${encodeURIComponent(code)}?print=1`}
+              target="_blank"
+              rel="noopener"
+              className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-800"
+            >
+              진료용 PDF
+            </a>
+          </div>
 
           {/* 다른 환자로 이동 */}
           {patients.length > 1 && (

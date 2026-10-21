@@ -38,3 +38,6 @@ next-env.d.ts
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Local report previews contain patient data
+/preview/
