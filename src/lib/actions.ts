@@ -24,18 +24,12 @@ function addDays(date: string, days: number): string {
 
 type SurveyType = "pro_ctcae" | "qlq_c30" | "w0";
 
-// The sender (a Solapi-registered number) lives in the SMS_SENDER env var.
-// Recipients are the active rows of notify_recipients (managed in /admin);
-// SMS_NOTIFY_TO (comma-separated) is only a fallback when that table is empty.
+// Phone numbers live in env vars, not in the repo or the admin UI:
+// SMS_SENDER = Solapi-registered sender, SMS_NOTIFY_TO = comma-separated recipients.
 async function smsConfig(): Promise<{ sender: string; recipients: string[] }> {
   const sender = (process.env.SMS_SENDER ?? "").trim();
-  if (!sender) throw new Error("SMS_SENDER 환경변수가 설정되지 않았습니다.");
-  const rows = await sql`SELECT phone FROM notify_recipients WHERE active = TRUE ORDER BY created_at`;
-  let recipients = rows.map((r) => String(r.phone));
-  if (recipients.length === 0) {
-    recipients = (process.env.SMS_NOTIFY_TO ?? "").split(",").map((n) => n.trim()).filter(Boolean);
-  }
-  if (recipients.length === 0) throw new Error("알림 수신자가 없습니다. 관리자 > 알림 수신자에서 추가해 주세요.");
+  const recipients = (process.env.SMS_NOTIFY_TO ?? "").split(",").map((n) => n.trim()).filter(Boolean);
+  if (!sender || recipients.length === 0) throw new Error("SMS_SENDER / SMS_NOTIFY_TO 환경변수가 설정되지 않았습니다.");
   return { sender, recipients };
 }
 

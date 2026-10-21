@@ -13,28 +13,6 @@ async function requireAdmin() {
   if (!(await isAdminToken(cookie))) throw new Error("unauthorized");
 }
 
-export type AdminSession = {
-  id: string;
-  patient_code: string | null;
-  survey_type: string | null;
-  age: number | null;
-  gender: string | null;
-  cancer_type: string | null;
-  treatment_type: string | null;
-  started_at: string;
-  completed_at: string | null;
-  is_complete: boolean;
-  additional_comments: string | null;
-};
-
-export type AdminAnswer = {
-  item_id: number;
-  question_key: string;
-  question_type: string;
-  answer_value: number | null;
-  answer_boolean: boolean | null;
-};
-
 export type AdminParticipant = {
   id: string;
   name: string;
@@ -60,24 +38,24 @@ export type AdminMessage = {
   is_read: boolean;
 };
 
-export async function adminListSessions(): Promise<AdminSession[]> {
-  await requireAdmin();
-  const rows = await sql`
-    SELECT id, patient_code, survey_type, age, gender, cancer_type, treatment_type,
-           started_at, completed_at, is_complete, additional_comments
-    FROM survey_sessions ORDER BY started_at DESC LIMIT 200
-  `;
-  return serialize(rows) as AdminSession[];
-}
+export type AdminPatient = { patient_code: string; name: string };
 
-export async function adminGetSessionAnswers(sessionId: string): Promise<AdminAnswer[]> {
+/** Everyone with a participant code, in numeric order (001, 002, …). */
+export async function adminListPatients(): Promise<AdminPatient[]> {
   await requireAdmin();
-  if (!isUuid(sessionId)) return [];
   const rows = await sql`
-    SELECT item_id, question_key, question_type, answer_value, answer_boolean
-    FROM survey_answers WHERE session_id = ${sessionId} ORDER BY item_id, question_key
+    SELECT DISTINCT ON (patient_code) patient_code, name
+    FROM participants WHERE patient_code IS NOT NULL AND trim(patient_code) <> ''
+    ORDER BY patient_code, applied_at
   `;
-  return rows as AdminAnswer[];
+  const patients = rows.map((r) => ({ patient_code: String(r.patient_code), name: String(r.name ?? "") }));
+  const isNum = (c: string) => /^\d+$/.test(c);
+  patients.sort((a, b) =>
+    isNum(a.patient_code) && isNum(b.patient_code)
+      ? Number(a.patient_code) - Number(b.patient_code)
+      : a.patient_code.localeCompare(b.patient_code, "ko")
+  );
+  return patients;
 }
 
 export async function adminListParticipants(): Promise<AdminParticipant[]> {
@@ -118,35 +96,6 @@ export async function adminSetEnrolled(id: string, enrolled: boolean): Promise<{
   return { ok: true };
 }
 
-export type NotifyRecipient = { id: string; name: string; phone: string; active: boolean };
-
-export async function adminListRecipients(): Promise<NotifyRecipient[]> {
-  await requireAdmin();
-  const rows = await sql`SELECT id, name, phone, active FROM notify_recipients ORDER BY created_at`;
-  return rows as NotifyRecipient[];
-}
-
-export async function adminAddRecipient(name: string, phone: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireAdmin();
-  const digits = String(phone ?? "").replace(/\D/g, "");
-  if (!/^01\d{8,9}$/.test(digits)) return { ok: false, error: "휴대폰 번호 형식이 올바르지 않습니다." };
-  const label = String(name ?? "").trim().slice(0, 50);
-  await sql`INSERT INTO notify_recipients (name, phone) VALUES (${label}, ${digits}) ON CONFLICT (phone) DO UPDATE SET name = EXCLUDED.name, active = TRUE`;
-  return { ok: true };
-}
-
-export async function adminSetRecipientActive(id: string, active: boolean): Promise<void> {
-  await requireAdmin();
-  if (!isUuid(id)) return;
-  await sql`UPDATE notify_recipients SET active = ${!!active} WHERE id = ${id}`;
-}
-
-export async function adminDeleteRecipient(id: string): Promise<void> {
-  await requireAdmin();
-  if (!isUuid(id)) return;
-  await sql`DELETE FROM notify_recipients WHERE id = ${id}`;
-}
-
 export async function adminListMessages(): Promise<AdminMessage[]> {
   await requireAdmin();
   const rows = await sql`
@@ -168,23 +117,39 @@ export async function adminSetMessageRead(id: string, isRead: boolean): Promise<
   await sql`UPDATE patient_messages SET is_read = ${!!isRead} WHERE id = ${id}`;
 }
 
+export type DashboardSession = { id: string; completed_at: string | null };
+export type DashboardAnswer = {
+  session_id: string;
+  item_id: number;
+  question_key: string;
+  question_type: string;
+  answer_value: number | null;
+  answer_boolean: boolean | null;
+};
+
 export async function adminGetPatientDashboard(patientCode: string): Promise<{
-  sessions: { id: string; completed_at: string | null; age: number | null; gender: string | null }[];
-  answers: { session_id: string; item_id: number; question_key: string; question_type: string; answer_value: number | null }[];
+  name: string;
+  sessions: DashboardSession[];
+  answers: DashboardAnswer[];
 }> {
   await requireAdmin();
+  const [person] = await sql`
+    SELECT name FROM participants WHERE patient_code = ${patientCode} ORDER BY applied_at LIMIT 1
+  `;
+  const name = String(person?.name ?? "");
   const sessions = await sql`
-    SELECT id, completed_at, age, gender FROM survey_sessions
+    SELECT id, completed_at FROM survey_sessions
     WHERE patient_code = ${patientCode} AND survey_type = 'pro_ctcae' AND is_complete = TRUE
     ORDER BY completed_at ASC
   `;
-  if (sessions.length === 0) return { sessions: [], answers: [] };
+  if (sessions.length === 0) return { name, sessions: [], answers: [] };
   const answers = await sql`
-    SELECT session_id, item_id, question_key, question_type, answer_value FROM survey_answers
-    WHERE session_id = ANY(${sessions.map((s) => s.id)}::uuid[])
+    SELECT session_id, item_id, question_key, question_type, answer_value, answer_boolean FROM survey_answers
+    WHERE session_id = ANY(${sessions.map((x) => x.id)}::uuid[])
   `;
   return {
-    sessions: serialize(sessions) as { id: string; completed_at: string | null; age: number | null; gender: string | null }[],
-    answers: answers as { session_id: string; item_id: number; question_key: string; question_type: string; answer_value: number | null }[],
+    name,
+    sessions: serialize(sessions) as DashboardSession[],
+    answers: answers as DashboardAnswer[],
   };
 }

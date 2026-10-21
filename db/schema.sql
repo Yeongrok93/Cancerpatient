@@ -111,16 +111,6 @@ CREATE INDEX IF NOT EXISTS idx_patient_messages_created ON patient_messages (cre
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS enrolled BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS enrolled_at TIMESTAMPTZ;
 
--- Researchers who get the 참여신청 text message (managed in /admin 알림 수신자 tab).
--- When no active row exists the SMS_NOTIFY_TO env var is used as a fallback.
-CREATE TABLE IF NOT EXISTS notify_recipients (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name       TEXT NOT NULL DEFAULT '',
-  phone      TEXT NOT NULL UNIQUE,          -- digits only, e.g. 01012345678
-  active     BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
 -- One row per automated reminder text sent (see src/lib/reminders.ts). The unique key
 -- (participant, kind, cycle_date) stops a participant getting the same reminder twice;
 -- cycle_date is the KST date of the completed survey the reminder follows.

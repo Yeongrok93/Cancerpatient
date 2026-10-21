@@ -1,52 +1,21 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  adminListSessions,
-  adminGetSessionAnswers,
+  adminListPatients,
   adminListParticipants,
   adminSetStudyStartDate,
   adminSetEnrolled,
-  adminListRecipients,
-  adminAddRecipient,
-  adminSetRecipientActive,
-  adminDeleteRecipient,
-  type NotifyRecipient,
   adminAssignPatientCode,
   adminListMessages,
   adminUnreadMessageCount,
   adminSetMessageRead,
-  type AdminSession,
-  type AdminAnswer,
+  type AdminPatient,
   type AdminParticipant,
   type AdminMessage,
 } from "@/lib/adminActions";
-import { SURVEY_ITEMS, RESPONSE_OPTIONS } from "@/lib/questions";
-
-type Session = AdminSession;
-type Answer = AdminAnswer;
-
-function SurveyTypeBadge({ type }: { type: string | null }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    pro_ctcae: { label: "PRO-CTCAE", cls: "bg-primary-100 text-primary-700" },
-    qlq_c30:   { label: "QLQ-C30",   cls: "bg-blue-100 text-blue-700" },
-    w0:        { label: "W0",         cls: "bg-emerald-100 text-emerald-700" },
-  };
-  const entry = type ? map[type] : null;
-  return entry ? (
-    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${entry.cls}`}>{entry.label}</span>
-  ) : (
-    <span className="text-gray-400 text-xs">—</span>
-  );
-}
-
-const GENDER_LABEL: Record<string, string> = {
-  male: "남성",
-  female: "여성",
-  other: "기타",
-  prefer_not: "응답 안 함",
-};
+import { formatPatientCode, patientLabel } from "@/lib/patientLabel";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString("ko-KR", {
@@ -62,12 +31,9 @@ type Participant = AdminParticipant;
 type PatientMessage = AdminMessage;
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<"surveys" | "participants" | "messages" | "recipients">("surveys");
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selectedAnswers, setSelectedAnswers] = useState<Answer[]>([]);
-  const [answerLoading, setAnswerLoading] = useState(false);
+  const [tab, setTab] = useState<"patients" | "participants" | "messages">("patients");
+  const [patients, setPatients] = useState<AdminPatient[]>([]);
+  const [patientsLoading, setPatientsLoading] = useState(true);
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [assigningId, setAssigningId] = useState<string | null>(null);
@@ -76,31 +42,13 @@ export default function AdminPage() {
   const [messages, setMessages] = useState<PatientMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [recipients, setRecipients] = useState<NotifyRecipient[]>([]);
-  const [recipientsLoading, setRecipientsLoading] = useState(false);
-  const [newRecName, setNewRecName] = useState("");
-  const [newRecPhone, setNewRecPhone] = useState("");
 
   useEffect(() => {
-    async function load() {
-      try {
-        setSessions(await adminListSessions());
-      } catch (err) {
-        console.error(err);
-      }
-      setLoading(false);
-    }
-    load();
+    adminListPatients()
+      .then(setPatients)
+      .catch((err) => console.error(err))
+      .finally(() => setPatientsLoading(false));
   }, []);
-
-  const patientDashboards = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const s of sessions) {
-      if (s.survey_type !== "pro_ctcae" || !s.is_complete || !s.patient_code) continue;
-      counts.set(s.patient_code, (counts.get(s.patient_code) ?? 0) + 1);
-    }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-  }, [sessions]);
 
   useEffect(() => {
     if (tab !== "participants") return;
@@ -130,37 +78,6 @@ export default function AdminPage() {
       .catch((err) => console.error(err))
       .finally(() => setMessagesLoading(false));
   }, [tab]);
-
-  useEffect(() => {
-    if (tab !== "recipients") return;
-    setRecipientsLoading(true);
-    adminListRecipients()
-      .then(setRecipients)
-      .catch((err) => console.error(err))
-      .finally(() => setRecipientsLoading(false));
-  }, [tab]);
-
-  async function addRecipient() {
-    const res = await adminAddRecipient(newRecName, newRecPhone).catch(() => ({ ok: false as const, error: "저장에 실패했습니다." }));
-    if (!res.ok) {
-      alert(res.error);
-      return;
-    }
-    setNewRecName("");
-    setNewRecPhone("");
-    setRecipients(await adminListRecipients());
-  }
-
-  async function toggleRecipient(id: string, active: boolean) {
-    setRecipients((prev) => prev.map((r) => (r.id === id ? { ...r, active } : r)));
-    await adminSetRecipientActive(id, active);
-  }
-
-  async function removeRecipient(id: string) {
-    if (!window.confirm("이 수신자를 삭제할까요?")) return;
-    setRecipients((prev) => prev.filter((r) => r.id !== id));
-    await adminDeleteRecipient(id);
-  }
 
   async function toggleEnrolled(id: string, enrolled: boolean) {
     const res = await adminSetEnrolled(id, enrolled).catch(() => ({ ok: false }));
@@ -211,57 +128,6 @@ export default function AdminPage() {
     setTimeout(() => setCopiedKey((k) => (k === key ? null : k)), 1500);
   }
 
-  async function viewAnswers(sessionId: string) {
-    setSelectedId(sessionId);
-    setAnswerLoading(true);
-    const data = await adminGetSessionAnswers(sessionId).catch((err) => {
-      console.error(err);
-      return [];
-    });
-    setSelectedAnswers(data);
-    setAnswerLoading(false);
-  }
-
-  function getAnswerLabel(answer: Answer): string {
-    if (answer.question_type === "presence") {
-      return answer.answer_boolean === true ? "예" : answer.answer_boolean === false ? "아니오" : "-";
-    }
-    const type = answer.question_type as keyof typeof RESPONSE_OPTIONS;
-    const opts = RESPONSE_OPTIONS[type];
-    return answer.answer_value !== null && answer.answer_value !== undefined
-      ? `${answer.answer_value} - ${opts[answer.answer_value]}`
-      : "-";
-  }
-
-  const selectedSession = sessions.find((s) => s.id === selectedId);
-
-  function exportCSV() {
-    if (!selectedAnswers.length || !selectedSession) return;
-    const rows = selectedAnswers.map((a) => {
-      const item = SURVEY_ITEMS.find((i) => i.id === a.item_id);
-      return [
-        selectedSession.patient_code ?? "",
-        a.item_id,
-        item?.termKo ?? "",
-        a.question_key,
-        a.question_type,
-        getAnswerLabel(a),
-      ].join(",");
-    });
-    if (selectedSession.additional_comments) {
-      rows.push(
-        `${selectedSession.patient_code ?? ""},,주관식 추가 의견,,,"${selectedSession.additional_comments.replace(/"/g, '""')}"`
-      );
-    }
-    const csv = ["환자코드,문항번호,증상(한국어),소문항,유형,응답", ...rows].join("\n");
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `pro-ctcae-${selectedSession.patient_code ?? selectedId?.slice(0, 8)}.csv`;
-    a.click();
-  }
-
   async function handleLogout() {
     await fetch("/api/admin-logout", { method: "POST" });
     window.location.href = "/admin/login";
@@ -281,7 +147,7 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        {(["surveys", "participants", "messages", "recipients"] as const).map((t) => (
+        {(["patients", "participants", "messages"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -289,7 +155,7 @@ export default function AdminPage() {
               tab === t ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            {t === "surveys" ? `설문 응답 (${sessions.length})` : t === "participants" ? "참여신청" : t === "recipients" ? "알림 수신자" : "환자 문의"}
+            {t === "patients" ? "환자" : t === "participants" ? "참여신청" : "환자 문의"}
             {t === "messages" && unreadCount > 0 && (
               <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">
                 {unreadCount}
@@ -299,177 +165,31 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {/* === 설문 응답 탭 === */}
-      {tab === "surveys" && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-1">
-              <p className="text-2xl font-bold text-primary-600">{sessions.length}</p>
-              <p className="text-sm text-gray-500">총 설문 세션</p>
-            </div>
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-1">
-              <p className="text-2xl font-bold text-green-600">
-                {sessions.filter((s) => s.is_complete).length}
-              </p>
-              <p className="text-sm text-gray-500">완료된 설문</p>
-            </div>
+      {/* === 환자 탭: 환자를 먼저 선택 === */}
+      {tab === "patients" && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="font-semibold text-gray-800">환자 선택</h2>
+            <p className="text-xs text-gray-400 mt-0.5">환자를 선택하면 증상 대시보드로 이동합니다.</p>
           </div>
-
-          {patientDashboards.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-              <h2 className="font-semibold text-gray-800 mb-3">환자별 증상 대시보드</h2>
-              <div className="flex flex-wrap gap-2">
-                {patientDashboards.map(([code, count]) => (
-                  <Link
-                    key={code}
-                    href={`/admin/patients/${encodeURIComponent(code)}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 hover:border-primary-400 hover:bg-primary-50 text-sm font-mono text-gray-700 transition-colors"
-                  >
-                    {code}
-                    <span className="text-xs text-gray-400 font-sans">{count}주</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <h2 className="font-semibold text-gray-800">응답 목록</h2>
-            </div>
-            {loading ? (
-              <div className="p-8 text-center text-gray-400">로딩 중...</div>
-            ) : sessions.length === 0 ? (
-              <div className="p-8 text-center text-gray-400">아직 응답이 없습니다.</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">환자 코드</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">설문 유형</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">나이/성별</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">시작일</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">상태</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">액션</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {sessions.map((s) => (
-                      <tr
-                        key={s.id}
-                        className={`hover:bg-gray-50 transition-colors ${
-                          selectedId === s.id ? "bg-primary-50" : ""
-                        }`}
-                      >
-                        <td className="px-4 py-3 font-mono text-xs">{s.patient_code ?? "—"}</td>
-                        <td className="px-4 py-3">
-                          <SurveyTypeBadge type={s.survey_type} />
-                        </td>
-                        <td className="px-4 py-3 text-gray-600">
-                          {s.age ? `${s.age}세` : "—"}{" "}
-                          {s.gender ? `/ ${GENDER_LABEL[s.gender] ?? s.gender}` : ""}
-                        </td>
-                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                          {formatDate(s.started_at)}
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${
-                              s.is_complete
-                                ? "bg-green-100 text-green-700"
-                                : "bg-amber-100 text-amber-700"
-                            }`}
-                          >
-                            {s.is_complete ? "완료" : "진행 중"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => viewAnswers(s.id)}
-                            className="text-xs text-primary-600 hover:underline font-medium"
-                          >
-                            응답 보기
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Answer detail panel */}
-          {selectedId && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                <div>
-                  <h2 className="font-semibold text-gray-800">응답 상세</h2>
-                  {selectedSession && (
-                    <p className="text-xs text-gray-400 mt-0.5">
-                      환자: {selectedSession.patient_code ?? "익명"} ·{" "}
-                      {selectedSession.completed_at
-                        ? `완료: ${formatDate(selectedSession.completed_at)}`
-                        : "미완료"}
-                    </p>
-                  )}
-                </div>
-                <button
-                  onClick={exportCSV}
-                  className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+          {patientsLoading ? (
+            <div className="p-8 text-center text-gray-400">로딩 중...</div>
+          ) : patients.length === 0 ? (
+            <div className="p-8 text-center text-gray-400">참여자번호가 배정된 환자가 없습니다.</div>
+          ) : (
+            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {patients.map((p) => (
+                <Link
+                  key={p.patient_code}
+                  href={`/admin/patients/${encodeURIComponent(p.patient_code)}`}
+                  className="px-4 py-3 rounded-xl border border-gray-200 hover:border-primary-400 hover:bg-primary-50 text-sm font-medium text-gray-800 transition-colors"
                 >
-                  CSV 내보내기
-                </button>
-              </div>
-
-              {answerLoading ? (
-                <div className="p-8 text-center text-gray-400">로딩 중...</div>
-              ) : selectedAnswers.length === 0 ? (
-                <div className="p-8 text-center text-gray-400">응답 데이터가 없습니다.</div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">증상 (한국어)</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">영문</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">소문항</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">유형</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">응답</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {selectedAnswers.map((a, idx) => {
-                        const item = SURVEY_ITEMS.find((i) => i.id === a.item_id);
-                        return (
-                          <tr key={idx} className="hover:bg-gray-50">
-                            <td className="px-4 py-2.5 text-gray-400">{a.item_id}</td>
-                            <td className="px-4 py-2.5 text-gray-800">{item?.termKo ?? "—"}</td>
-                            <td className="px-4 py-2.5 text-gray-500 text-xs">{item?.termEn ?? "—"}</td>
-                            <td className="px-4 py-2.5 font-mono text-gray-500">{a.question_key}</td>
-                            <td className="px-4 py-2.5 text-gray-500 text-xs">{a.question_type}</td>
-                            <td className="px-4 py-2.5 font-medium text-gray-900">{getAnswerLabel(a)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {selectedSession?.additional_comments && (
-                <div className="px-5 py-4 border-t border-gray-100 space-y-1.5">
-                  <p className="text-xs font-medium text-gray-500 uppercase">주관식 추가 의견</p>
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap bg-gray-50 rounded-lg p-3">
-                    {selectedSession.additional_comments}
-                  </p>
-                </div>
-              )}
+                  {patientLabel(p.patient_code, p.name)}
+                </Link>
+              ))}
             </div>
           )}
-        </>
+        </div>
       )}
 
       {/* === 참여신청 탭 === */}
@@ -558,7 +278,7 @@ export default function AdminPage() {
                         ) : p.patient_code ? (
                           <div className="flex items-center gap-2">
                             <span className="font-mono text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-                              {p.patient_code}
+                              {formatPatientCode(p.patient_code)}
                             </span>
                             <button
                               onClick={() => { setAssigningId(p.id); setAssignCode(p.patient_code ?? ""); }}
@@ -627,59 +347,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {/* === 알림 수신자 탭 === */}
-      {tab === "recipients" && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100">
-            <h2 className="font-semibold text-gray-800">알림 수신자</h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              새 참여신청이 들어오면 아래 사용 중인 번호로 문자가 발송됩니다. 이 목록이 비어 있으면 환경변수(SMS_NOTIFY_TO)를 대신 사용합니다.
-            </p>
-          </div>
-          <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center gap-2">
-            <input
-              type="text"
-              value={newRecName}
-              onChange={(e) => setNewRecName(e.target.value)}
-              placeholder="이름"
-              className="w-32 px-2 py-1.5 border border-gray-300 rounded text-sm"
-            />
-            <input
-              type="tel"
-              value={newRecPhone}
-              onChange={(e) => setNewRecPhone(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") addRecipient(); }}
-              placeholder="휴대폰 번호"
-              className="w-44 px-2 py-1.5 border border-gray-300 rounded text-sm"
-            />
-            <button onClick={addRecipient} className="text-sm px-3 py-1.5 bg-primary-600 text-white rounded hover:bg-primary-700">
-              추가
-            </button>
-          </div>
-          {recipientsLoading ? (
-            <div className="p-8 text-center text-gray-400">로딩 중...</div>
-          ) : recipients.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">등록된 수신자가 없습니다.</div>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {recipients.map((r) => (
-                <div key={r.id} className="px-5 py-3 flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-sm cursor-pointer">
-                    <input type="checkbox" checked={r.active} onChange={(e) => toggleRecipient(r.id, e.target.checked)} />
-                    <span className={r.active ? "text-gray-900" : "text-gray-400"}>{r.name || "(이름 없음)"}</span>
-                  </label>
-                  <span className="font-mono text-xs text-gray-600">{r.phone}</span>
-                  <span className="text-xs text-gray-400">{r.active ? "사용 중" : "중지"}</span>
-                  <button onClick={() => removeRecipient(r.id)} className="ml-auto text-xs text-red-600 hover:underline">
-                    삭제
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* === 환자 문의 탭 === */}
       {tab === "messages" && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -700,7 +367,7 @@ export default function AdminPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                        {m.patient_code}
+                        {formatPatientCode(m.patient_code)}
                       </span>
                       <span className="text-xs text-gray-400">{formatDate(m.created_at)}</span>
                       {!m.is_read && (
