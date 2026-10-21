@@ -258,17 +258,17 @@ export default function PatientDashboardPage() {
         </div>
 
         {alertGroups.length > 0 && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
-            <p className="text-sm font-bold text-red-800">
+          <div className="bg-white border border-gray-900 rounded-xl p-4 space-y-3">
+            <p className="text-sm font-bold text-gray-900">
               이번 주 중증(Grade 3) 증상
-              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-red-600 text-white text-xs font-semibold">
+              <span className="ml-2 text-sm font-bold text-gray-900">
                 {alertRows.length}개
               </span>
             </p>
             <div className="space-y-2.5">
               {alertGroups.map(({ category, items }) => (
                 <div key={category} className="flex items-start gap-3">
-                  <span className="shrink-0 w-14 pt-1 text-[11px] font-semibold text-red-700/80">{category}</span>
+                  <span className="shrink-0 w-14 pt-1 text-[11px] font-semibold text-gray-900">{category}</span>
                   <div className="flex flex-wrap gap-1.5">
                     {items.map((item) => {
                       const { main, note } = splitTerm(item.termKo);
@@ -276,10 +276,10 @@ export default function PatientDashboardPage() {
                         <span
                           key={item.id}
                           title={item.termKo}
-                          className="inline-flex items-baseline gap-1 rounded-lg bg-white border border-red-200 px-2.5 py-1 text-sm font-medium text-red-900"
+                          className="inline-flex items-baseline gap-1 rounded-lg bg-white border border-gray-900 px-2.5 py-1 text-sm font-medium text-gray-900"
                         >
                           {main}
-                          {note && <span className="text-[11px] font-normal text-red-700/70">{note}</span>}
+                          {note && <span className="text-[11px] font-normal text-gray-600">{note}</span>}
                         </span>
                       );
                     })}
