@@ -4,38 +4,25 @@
 
 import { createHash } from "crypto";
 import { sql } from "./db";
-import { getNotesSummary, type NotesSummary } from "./notesSummary";
+import type { NotesSummary } from "./notesSummary";
 import { parseSex, type Sex } from "./questions";
 import { REPORT_TEMPLATE_VERSION, type ReportAnswer, type ReportInput, type ReportLang, type ReportSession } from "./report";
-
-const SAMPLE_NOTES = [
-  "- (샘플) 항암 치료가 길어지며 피로와 의욕 저하를 호소함.",
-  "- (샘플) 진료 간격이 길어 증상 변화를 상담할 기회가 적다고 느낌.",
-  "- (샘플) 증상이 심해질 때 어디로 연락해야 하는지 안내를 원함.",
-].join("\n");
-
-const SAMPLE_NOTES_EN = [
-  "- (Sample) Reports fatigue and low motivation as chemotherapy continues.",
-  "- (Sample) Visits are far apart, so there is little chance to discuss symptom changes.",
-  "- (Sample) Wants to know whom to contact when symptoms worsen.",
-].join("\n");
 
 export type LoadReportOptions = {
   /** The date printed as 작성일 (default: now). Pass it to regenerate a document for a past date. */
   asOf?: Date;
   autoPrint?: boolean;
-  /** Layout preview with made-up notes instead of the real summary. */
+  /** Kept for compatibility; the hand-out no longer prints notes, so this has no effect. */
   sampleNotes?: boolean;
   /** Language of the document and of the notes summary (default Korean). */
   lang?: ReportLang;
 };
 
 /** Short fingerprint of what is printed, so two copies can be compared at a glance. */
-function dataId(code: string, lang: ReportLang, sex: Sex | null, sessions: ReportSession[], answers: ReportAnswer[], notes: NotesSummary): string {
+function dataId(code: string, lang: ReportLang, sex: Sex | null, sessions: ReportSession[], answers: ReportAnswer[], notesText: string): string {
   const canonAnswers = answers
     .map((a) => `${a.session_id}|${a.item_id}|${a.question_key}|${a.answer_value ?? ""}`)
     .sort();
-  const summaryText = notes.kind === "summary" || notes.kind === "sample" ? notes.text : `(${notes.kind})`;
   const payload = JSON.stringify({
     v: REPORT_TEMPLATE_VERSION,
     code,
@@ -43,7 +30,7 @@ function dataId(code: string, lang: ReportLang, sex: Sex | null, sessions: Repor
     sex,
     sessions: sessions.map((s) => `${s.id}|${s.completed_at}`),
     answers: canonAnswers,
-    summary: summaryText,
+    notes: notesText ? createHash("sha256").update(notesText).digest("hex").slice(0, 12) : "",
   });
   return createHash("sha256").update(payload).digest("hex").slice(0, 10).toUpperCase();
 }
@@ -72,14 +59,14 @@ export async function loadReportInput(code: string, opts: LoadReportOptions = {}
         `
   ) as ReportAnswer[];
 
-  const noteRows = await sql`
-    SELECT note_date::text AS note_date, body FROM nursing_notes
-    WHERE patient_code = ${code} ORDER BY note_date DESC, created_at DESC
-  `;
   const lang: ReportLang = opts.lang ?? "ko";
-  const notes: NotesSummary = opts.sampleNotes
-    ? { kind: "sample", text: lang === "en" ? SAMPLE_NOTES_EN : SAMPLE_NOTES }
-    : await getNotesSummary(code, noteRows.map((n) => ({ note_date: String(n.note_date), body: String(n.body) })), lang);
+  // The notes are never printed on the hand-out. Their text only decides which symptoms are put first and
+  // starred in the summary (matched by name, locally — nothing is sent to an API).
+  const noteRows = await sql`
+    SELECT body FROM nursing_notes WHERE patient_code = ${code} ORDER BY note_date DESC, created_at DESC
+  `;
+  const notesText = noteRows.map((n) => String(n.body)).join("\n");
+  const notes: NotesSummary = { kind: "none" };
 
   const sex = parseSex(person.gender);
   return {
@@ -90,8 +77,9 @@ export async function loadReportInput(code: string, opts: LoadReportOptions = {}
     sessions,
     answers,
     notes,
+    notesText,
     generatedAt: opts.asOf,
     autoPrint: opts.autoPrint,
-    dataId: dataId(code, lang, sex, sessions, answers, notes),
+    dataId: dataId(code, lang, sex, sessions, answers, notesText),
   };
 }

@@ -1,6 +1,6 @@
 // Clinic hand-out ("진료용 요약"): the symptoms a doctor should look at first —
-// Grade 3 now, or Grade higher than at the previous survey — plus a summary of the
-// researcher notes. Pure functions: data in, self-contained printable HTML out
+// Grade 3 now, or Grade higher than at the previous survey — plus a short, data-derived
+// summary of the key PRO-CTCAE findings (no researcher notes are printed). Pure functions: data in, self-contained printable HTML out
 // (A4, inline SVG; only the Grade boxes are coloured), aimed at a single page.
 
 import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, itemApplies, type Sex, type SurveyItem, type QuestionType } from "./questions";
@@ -9,7 +9,7 @@ import { formatPatientCode } from "./patientLabel";
 import type { NotesSummary } from "./notesSummary";
 
 /** Bump when the layout or wording of the document changes. Printed in the footer. */
-export const REPORT_TEMPLATE_VERSION = "2";
+export const REPORT_TEMPLATE_VERSION = "8";
 
 export type ReportSession = { id: string; completed_at: string | null };
 export type ReportAnswer = {
@@ -28,6 +28,8 @@ export type ReportInput = {
   sessions: ReportSession[]; // completed 증상 설문, oldest first
   answers: ReportAnswer[];
   notes: NotesSummary;
+  /** Text of the researcher notes. It is never printed: symptoms it names are put first in the summary lines and starred. */
+  notesText?: string | null;
   /** Language of the whole document (default Korean). */
   lang?: ReportLang;
   /** Printed as 작성일. Defaults to now; pass a date to regenerate a document "as of" that day. */
@@ -75,6 +77,8 @@ type Copy = {
   s2: string;
   s3: string;
   s3sub: string;
+  sTraj: string;
+  sTrajSub: string;
   s3recent: (n: number) => string;
   s4: string;
   noSessions: string;
@@ -106,8 +110,10 @@ const COPY: Record<ReportLang, Copy> = {
     s2: "2. 이전 설문보다 Grade가 올라간 증상",
     s3: "3. 증상 부담 추이",
     s3sub: "설문별 Grade별 증상 수",
+    sTraj: "4. 증상별 변화",
+    sTrajSub: "Grade 2 이상이었거나 변화가 있었던 증상 (설문 순서대로)",
     s3recent: (n) => ` · 최근 ${n}회`,
-    s4: "연구자 노트 요약",
+    s4: "PRO-CTCAE 증상부담 요약",
     noSessions: "완료된 증상 설문이 없습니다.",
     noneG3: "해당하는 증상이 없습니다.",
     noPrev: "이전 설문이 없어 비교할 수 없습니다.",
@@ -135,8 +141,10 @@ const COPY: Record<ReportLang, Copy> = {
     s2: "2. Symptoms with a Higher Grade than the Previous Survey",
     s3: "3. Symptom Burden Trend",
     s3sub: "Number of symptoms at each grade, by survey",
+    sTraj: "4. Symptom Trajectories",
+    sTrajSub: "Symptoms that reached Grade 2+ or changed (in survey order)",
     s3recent: (n) => ` · last ${n} surveys`,
-    s4: "Researcher Notes Summary",
+    s4: "PRO-CTCAE Symptom Burden Summary",
     noSessions: "No completed symptom survey.",
     noneG3: "None.",
     noPrev: "No previous survey to compare with.",
@@ -311,6 +319,97 @@ function notesHtml(notes: NotesSummary, c: Copy): string {
   return `<ul class="notes">${items}</ul>${meta}`;
 }
 
+// ── key findings (computed only from the PRO-CTCAE answers) ─────────────
+
+type KeyRow = { it: ItemSeries; cur: number | null; prev: number | null };
+
+/** Grade-3 items per category, e.g. "통증 4 · 수면, 피로 및 정서 3". */
+function categoryCounts(rows: KeyRow[], lang: ReportLang): string {
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.it.item.category, (counts.get(r.it.item.category) ?? 0) + 1);
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([cat, n]) => `${categoryLabel(cat, lang)} ${n}${lang === "ko" ? "개" : ""}`)
+    .join(", ");
+}
+
+/** Words in the researcher notes that mean a PRO-CTCAE symptom although the item has a different name. */
+const NOTE_ALIASES: Record<string, string[]> = {
+  불안감: ["불안"],
+  어지럼증: ["어지러"],
+  피로감: ["피로"],
+  슬픔: ["우울"],
+  Anxiety: ["anxiety", "anxious"],
+  Dizziness: ["dizz"],
+};
+
+/** Symptoms the researcher notes single out: the symptom's name (or an alias) appears in the notes. */
+function noteEmphasisIds(rows: KeyRow[], lang: ReportLang, notesText: string | null | undefined): Set<number> {
+  const text = (notesText ?? "").toLowerCase();
+  const ids = new Set<number>();
+  if (!text) return ids;
+  for (const r of rows) {
+    const main = termParts(r.it.item, lang).main;
+    const words = [main, ...(NOTE_ALIASES[main] ?? [])].map((w) => w.toLowerCase());
+    if (words.some((w) => w.length >= 2 && text.includes(w))) ids.add(r.it.item.id);
+  }
+  return ids;
+}
+
+/** A few terse lines for a doctor who reads only this box. Symptoms the notes single out come first in each list, marked ★. */
+function keyFindings(rows: KeyRow[], sessions: ReportSession[], last: number, lang: ReportLang, emph: Set<number>): string[] {
+  if (last < 0) return [];
+  const ko = lang === "ko";
+  const name = (r: KeyRow) => `${emph.has(r.it.item.id) ? "★ " : ""}${termParts(r.it.item, lang).main}`;
+  const join = (rs: KeyRow[], max = 5) => {
+    const ordered = [...rs].sort((x, y) => Number(emph.has(y.it.item.id)) - Number(emph.has(x.it.item.id)));
+    const shown = ordered.slice(0, max).map(name).join(", ");
+    return ordered.length > max ? shown + (ko ? ` 외 ${ordered.length - max}개` : ` +${ordered.length - max} more`) : shown;
+  };
+  const hasPrev = last >= 1;
+  const graded = rows.filter((r) => r.cur !== null);
+  const g3 = graded.filter((r) => r.cur === 3);
+  const out: string[] = [];
+
+  // 1. Grade 3 count (with the previous count) and where they cluster
+  const g3Prev = hasPrev ? rows.filter((r) => r.prev === 3).length : null;
+  const where = g3.length >= 2 ? `: ${categoryCounts(g3, lang)}` : "";
+  if (g3.length === 0) out.push(ko ? "Grade 3 증상 없음" : "No Grade 3 symptoms");
+  else
+    out.push(
+      ko
+        ? `Grade 3 증상 ${g3.length}개${g3Prev !== null ? ` (이전 ${g3Prev}개)` : ""}${where}`
+        : `Grade 3 symptoms: ${g3.length}${g3Prev !== null ? ` (previous ${g3Prev})` : ""}${where}`
+    );
+
+  // 2. newly Grade 3
+  if (hasPrev) {
+    const newG3 = g3.filter((r) => r.prev !== null && r.prev < 3);
+    if (newG3.length > 0) out.push(ko ? `새로 Grade 3 (${newG3.length}개): ${join(newG3)}` : `New Grade 3 (${newG3.length}): ${join(newG3)}`);
+  }
+
+  // 3. daily-life interference reported as "quite a bit" or more
+  const heavy = graded.filter((r) => {
+    const q = r.it.item.questions.find((x) => x.type === "interference");
+    const v = q ? r.it.values[last][q.key] : undefined;
+    return v !== undefined && v >= 3;
+  });
+  if (heavy.length > 0)
+    out.push(ko ? `일상 방해 “상당히” 이상 (${heavy.length}개): ${join(heavy)}` : `Interferes “quite a bit” or more (${heavy.length}): ${join(heavy)}`);
+
+  // 4. improvement
+  if (hasPrev) {
+    const better = graded.filter((r) => r.prev !== null && r.prev >= 2 && r.cur! < r.prev);
+    if (better.length > 0) out.push(ko ? `호전 (${better.length}개): ${join(better)}` : `Improved (${better.length}): ${join(better)}`);
+  }
+  return out;
+}
+
+function keyFindingsHtml(lines: string[]): string {
+  return `<ul class="notes">${lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`;
+}
+
 // ── the document ────────────────────────────────────────────────────────
 
 export function renderReportHtml(input: ReportInput): string {
@@ -334,12 +433,13 @@ export function renderReportHtml(input: ReportInput): string {
   const grade3Rows = rows.filter((r) => r.grade3);
   const upRows = rows.filter((r) => r.increased && !r.grade3);
 
+  const emph = noteEmphasisIds(rows, lang, input.notesText);
   const itemHtml = (r: Row, withResponse: boolean): string => {
     const { main, note } = termParts(r.it.item, lang);
     const same = r.prev !== null && r.cur === r.prev;
     return `<div class="it">
       <div class="gg">${gradeBox(r.prev)}<span class="ar${r.increased ? " up" : ""}">${r.increased ? "▲" : "→"}</span>${gradeBox(r.cur)}</div>
-      <div class="tx"><b>${esc(main)}</b>${note ? `<span class="note"> ${esc(note)}</span>` : ""}${same ? `<span class="same">${esc(c.same)}</span>` : ""}${
+      <div class="tx"><b>${esc(main)}</b>${emph.has(r.it.item.id) ? `<span class="star">★</span>` : ""}${note ? `<span class="note"> ${esc(note)}</span>` : ""}${same ? `<span class="same">${esc(c.same)}</span>` : ""}${
         withResponse ? responseHtml(shortAnswers(r.it, last, c)) : ""
       }</div>
       ${showSpark ? sparkline(r.it.grades) : ""}
@@ -374,6 +474,31 @@ export function renderReportHtml(input: ReportInput): string {
       return `<div class="ir"><span class="irc">${esc(categoryLabel(category, lang))}</span><span class="chips">${chips}</span></div>`;
     }).join("");
 
+  /** Item-level course across all surveys, e.g. [2]→[2]→[1] 입마름. Shown from 3 surveys on. */
+  const trajHtml = (): string => {
+    if (sessions.length < 3) return "";
+    const list = series
+      .filter((it) => {
+        const g = it.grades.filter((x): x is number => x !== null);
+        return g.length > 0 && (Math.max(...g) >= 2 || new Set(it.grades.map((x) => x ?? -1)).size > 1);
+      })
+      .map((it) => ({ it, lastG: it.grades[last] ?? 0, maxG: Math.max(...it.grades.map((x) => x ?? 0)) }))
+      .sort((x, y) => y.lastG - x.lastG || y.maxG - x.maxG || x.it.item.id - y.it.item.id);
+    if (list.length === 0) return "";
+    const chip = (r: (typeof list)[number]) => {
+      const boxes = r.it.grades.map((g) => gradeBox(g)).join(`<span class="ar">→</span>`);
+      const dir = r.lastG > (r.it.grades[0] ?? 0) ? "▲" : r.lastG < (r.it.grades[0] ?? 0) ? "▼" : "";
+      return `<div class="tj"><div class="gg">${boxes}</div><b>${esc(termParts(r.it.item, lang).main)}</b>${emph.has(r.it.item.id) ? `<span class="star">★</span>` : ""}${dir ? `<span class="dir">${dir}</span>` : ""}</div>`;
+    };
+    const blocks = CATEGORIES.map((category) => {
+      const inCat = list.filter((r) => r.it.item.category === category);
+      return inCat.length === 0 ? "" : `<div class="cb"><div class="ch">${esc(categoryLabel(category, lang))}</div>${inCat.map(chip).join("")}</div>`;
+    }).join("");
+    const heads = sessions.map((x, i) => `${weekName(i, c)} ${mmdd(x.completed_at)}`).join(" → ");
+    return `<h2>${esc(c.sTraj)} <span class="cnt">${esc(c.sTrajSub)}</span></h2><p class="muted" style="margin:2px 0 4px;font-size:8pt">${esc(heads)}</p><div class="cols">${blocks}</div>`;
+  };
+  const trajSection = trajHtml();
+
   const body =
     sessions.length === 0
       ? `<p class="muted">${esc(c.noSessions)}</p>`
@@ -387,7 +512,9 @@ export function renderReportHtml(input: ReportInput): string {
     ${!prevLabel ? `<p class="none">${esc(c.noPrev)}</p>` : upRows.length === 0 ? `<p class="none">${esc(c.noneG3)}</p>` : chipRowsHtml(upRows)}
 
     <h2>${esc(c.s3)} <span class="cnt">${esc(c.s3sub)}${sessions.length > MAX_TREND_ROWS ? esc(c.s3recent(MAX_TREND_ROWS)) : ""}</span></h2>
-    ${distributionChart(series, sessions, c)}`;
+    ${distributionChart(series, sessions, c)}
+
+    ${trajSection}`;
 
   return `<!doctype html>
 <html lang="${c.htmlLang}">
@@ -428,11 +555,14 @@ export function renderReportHtml(input: ReportInput): string {
   .gb.sm { min-width: 14px; height: 14px; line-height: 12px; font-size: 7.5pt; margin-right: 3px; }
   .gb-na { border-color: #bbb; color: #999; font-weight: 400; }
   .spark { flex: none; }
+  .tj { display: flex; align-items: center; gap: 6px; padding: 2px 0; border-bottom: 1px solid #ececec; break-inside: avoid; }
+  .tj b { font-size: 9.2pt; } .dir { font-size: 7.5pt; margin-left: 4px; }
   .none { padding: 6px; border: 1px dashed #999; text-align: center; margin: 3px 0; }
   svg text { font-family: inherit; }
   ul.notes { margin: 3px 0 0; padding-left: 16px; } ul.notes li { margin: 2px 0; }
   .sample { border: 1px dashed #111; padding: 3px 7px; font-size: 8pt; margin: 4px 0 0; }
   section.notes-block { break-inside: avoid; }
+  .star { margin-left: 4px; font-size: 8.5pt; }
   footer { margin-top: 12px; padding-top: 5px; border-top: 1px solid #999; font-size: 8pt; color: #333; display: flex; justify-content: space-between; gap: 12px; }
   .bar { position: sticky; top: 0; background: #111; color: #fff; padding: 8px 14px; font-size: 10pt; display: flex; justify-content: space-between; align-items: center; }
   .bar button { font: inherit; padding: 4px 12px; border: 1px solid #fff; background: #fff; color: #111; cursor: pointer; }
@@ -449,10 +579,14 @@ ${input.autoPrint ? `<div class="bar"><span>${esc(c.printBar)}</span><button onc
 
   ${body}
 
-  <section class="notes-block">
-    <h2>${sessions.length === 0 ? "1" : "4"}. ${esc(c.s4)}</h2>
-    ${notesHtml(input.notes, c)}
-  </section>
+  ${
+    sessions.length === 0
+      ? ""
+      : `<section class="notes-block">
+    <h2>${trajSection ? 5 : 4}. ${esc(c.s4)}</h2>
+    ${keyFindingsHtml(keyFindings(rows, sessions, last, lang, emph))}
+  </section>`
+  }
 
   <footer>
     <span>${esc(c.footerTitle)}</span>
