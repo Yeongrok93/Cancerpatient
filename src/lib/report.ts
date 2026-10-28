@@ -9,7 +9,7 @@ import { formatPatientCode } from "./patientLabel";
 import type { NotesSummary } from "./notesSummary";
 
 /** Bump when the layout or wording of the document changes. Printed in the footer. */
-export const REPORT_TEMPLATE_VERSION = "8";
+export const REPORT_TEMPLATE_VERSION = "12";
 
 export type ReportSession = { id: string; completed_at: string | null };
 export type ReportAnswer = {
@@ -111,7 +111,7 @@ const COPY: Record<ReportLang, Copy> = {
     s3: "3. 증상 부담 추이",
     s3sub: "설문별 Grade별 증상 수",
     sTraj: "4. 증상별 변화",
-    sTrajSub: "Grade 2 이상이었거나 변화가 있었던 증상 (설문 순서대로)",
+    sTrajSub: "현재 Grade 3이 아닌 증상 중 Grade 2 이상이었거나 변화가 있었던 것 (설문 순서대로)",
     s3recent: (n) => ` · 최근 ${n}회`,
     s4: "PRO-CTCAE 증상부담 요약",
     noSessions: "완료된 증상 설문이 없습니다.",
@@ -142,7 +142,7 @@ const COPY: Record<ReportLang, Copy> = {
     s3: "3. Symptom Burden Trend",
     s3sub: "Number of symptoms at each grade, by survey",
     sTraj: "4. Symptom Trajectories",
-    sTrajSub: "Symptoms that reached Grade 2+ or changed (in survey order)",
+    sTrajSub: "Symptoms not at Grade 3 now that reached Grade 2+ or changed (in survey order)",
     s3recent: (n) => ` · last ${n} surveys`,
     s4: "PRO-CTCAE Symptom Burden Summary",
     noSessions: "No completed symptom survey.",
@@ -477,8 +477,10 @@ export function renderReportHtml(input: ReportInput): string {
   /** Item-level course across all surveys, e.g. [2]→[2]→[1] 입마름. Shown from 3 surveys on. */
   const trajHtml = (): string => {
     if (sessions.length < 3) return "";
+    // Symptoms at Grade 3 now already carry their own trend line in section 1.
     const list = series
       .filter((it) => {
+        if (it.grades[last] === 3) return false;
         const g = it.grades.filter((x): x is number => x !== null);
         return g.length > 0 && (Math.max(...g) >= 2 || new Set(it.grades.map((x) => x ?? -1)).size > 1);
       })
@@ -495,7 +497,7 @@ export function renderReportHtml(input: ReportInput): string {
       return inCat.length === 0 ? "" : `<div class="cb"><div class="ch">${esc(categoryLabel(category, lang))}</div>${inCat.map(chip).join("")}</div>`;
     }).join("");
     const heads = sessions.map((x, i) => `${weekName(i, c)} ${mmdd(x.completed_at)}`).join(" → ");
-    return `<h2>${esc(c.sTraj)} <span class="cnt">${esc(c.sTrajSub)}</span></h2><p class="muted" style="margin:2px 0 4px;font-size:8pt">${esc(heads)}</p><div class="cols">${blocks}</div>`;
+    return `<h2>${esc(c.sTraj)} <span class="cnt">${esc(c.sTrajSub)}</span></h2><p class="muted" style="margin:2px 0 4px;font-size:8pt">${esc(heads)}</p><div class="cols cols3">${blocks}</div>`;
   };
   const trajSection = trajHtml();
 
@@ -525,7 +527,7 @@ export function renderReportHtml(input: ReportInput): string {
 <meta name="report-data-id" content="${esc(input.dataId ?? "")}">
 <meta name="report-template" content="v${REPORT_TEMPLATE_VERSION}">
 <style>
-  @page { size: A4; margin: 9mm 12mm 10mm; }
+  @page { size: A4; margin: 7mm 12mm 7mm; }
   * { box-sizing: border-box; }
   html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   body { margin: 0; color: #111; font: 9pt/1.4 ${c.fontStack}; background: #fff; }
@@ -533,7 +535,7 @@ export function renderReportHtml(input: ReportInput): string {
   header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; border-bottom: 2px solid #111; padding-bottom: 5px; margin-bottom: 8px; }
   header .ttl { font-size: 14.5pt; font-weight: 700; letter-spacing: -0.2px; line-height: 1.2; }
   header .who { text-align: right; font-size: 9pt; white-space: nowrap; } header .who b { font-size: 11pt; }
-  h2 { font-size: 10pt; margin: 9px 0 3px; padding-bottom: 2px; border-bottom: 1px solid #999; }
+  h2 { font-size: 10pt; margin: 6px 0 3px; padding-bottom: 2px; border-bottom: 1px solid #999; }
   h2 .cnt { font-weight: 400; font-size: 8.5pt; color: #555; margin-left: 6px; }
   .muted { color: #555; } p.muted { margin: 2px 0; }
   .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; margin: 5px 0 0; font-size: 8pt; }
@@ -555,6 +557,10 @@ export function renderReportHtml(input: ReportInput): string {
   .gb.sm { min-width: 14px; height: 14px; line-height: 12px; font-size: 7.5pt; margin-right: 3px; }
   .gb-na { border-color: #bbb; color: #999; font-weight: 400; }
   .spark { flex: none; }
+  .cols3 { column-count: 3; column-gap: 5mm; }
+  .cols3 .ch { font-size: 8pt; }
+  .cols3 .tj { padding: 1px 0; gap: 4px; } .cols3 .tj b { font-size: 8.6pt; }
+  .cols3 .gb { min-width: 15px; height: 15px; line-height: 13px; font-size: 8pt; }
   .tj { display: flex; align-items: center; gap: 6px; padding: 2px 0; border-bottom: 1px solid #ececec; break-inside: avoid; }
   .tj b { font-size: 9.2pt; } .dir { font-size: 7.5pt; margin-left: 4px; }
   .none { padding: 6px; border: 1px dashed #999; text-align: center; margin: 3px 0; }
@@ -563,7 +569,7 @@ export function renderReportHtml(input: ReportInput): string {
   .sample { border: 1px dashed #111; padding: 3px 7px; font-size: 8pt; margin: 4px 0 0; }
   section.notes-block { break-inside: avoid; }
   .star { margin-left: 4px; font-size: 8.5pt; }
-  footer { margin-top: 12px; padding-top: 5px; border-top: 1px solid #999; font-size: 8pt; color: #333; display: flex; justify-content: space-between; gap: 12px; }
+  footer { margin-top: 5px; padding-top: 4px; border-top: 1px solid #999; font-size: 8pt; color: #333; display: flex; justify-content: space-between; gap: 12px; }
   .bar { position: sticky; top: 0; background: #111; color: #fff; padding: 8px 14px; font-size: 10pt; display: flex; justify-content: space-between; align-items: center; }
   .bar button { font: inherit; padding: 4px 12px; border: 1px solid #fff; background: #fff; color: #111; cursor: pointer; }
   @media print { .bar { display: none; } .page { padding: 0; max-width: none; } }
