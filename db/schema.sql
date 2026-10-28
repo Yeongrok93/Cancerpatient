@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS participants (
 -- 연구참여시작 날짜 (added after initial schema; safe to re-run)
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS study_start_date DATE;
 
+-- 비고 (관리자 메모, 예: 참여거부)
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS remark TEXT;
+
 -- Per-patient survey link token (/s/<token>/<w0|pro|qlq>): 64 hex chars of randomness.
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS access_token TEXT
   DEFAULT (replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''));

@@ -8,6 +8,7 @@ import {
   adminSetStudyStartDate,
   adminSetGender,
   adminSetEnrolled,
+  adminSetRemark,
   adminAssignPatientCode,
   adminListMessages,
   adminUnreadMessageCount,
@@ -107,6 +108,16 @@ export default function AdminPage() {
     setParticipants((prev) => prev.map((p) => (p.id === id ? { ...p, patient_code: code.trim() } : p)));
     setAssigningId(null);
     setAssignCode("");
+  }
+
+  async function saveRemark(id: string, remark: string) {
+    const value = remark.trim();
+    const res = await adminSetRemark(id, value).catch(() => ({ ok: false }));
+    if (!res.ok) {
+      alert("비고 저장에 실패했습니다.");
+      return;
+    }
+    setParticipants((prev) => prev.map((p) => (p.id === id ? { ...p, remark: value || null } : p)));
   }
 
   async function saveGender(id: string, gender: string) {
@@ -230,6 +241,7 @@ export default function AdminPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">참여자번호</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" title="체크해야 자동 안내 문자 대상이 됩니다">연구참여 확인</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연구참여시작</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">비고</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">설문 링크 복사</th>
                   </tr>
                 </thead>
@@ -341,6 +353,19 @@ export default function AdminPage() {
                           value={p.study_start_date ?? ""}
                           onChange={(e) => saveStartDate(p.id, e.target.value)}
                           className="px-2 py-1 border border-gray-300 rounded text-xs"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <input
+                          key={`${p.id}-${p.remark ?? ""}`}
+                          type="text"
+                          defaultValue={p.remark ?? ""}
+                          maxLength={200}
+                          placeholder="예: 참여거부"
+                          onBlur={(e) => {
+                            if (e.target.value.trim() !== (p.remark ?? "")) saveRemark(p.id, e.target.value);
+                          }}
+                          className="w-36 px-2 py-1 border border-gray-300 rounded text-xs"
                         />
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">

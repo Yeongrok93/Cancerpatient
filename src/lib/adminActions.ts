@@ -30,6 +30,7 @@ export type AdminParticipant = {
   enrolled: boolean;
   enrolled_at: string | null;
   gender: Sex | null;
+  remark: string | null;
 };
 
 export type AdminMessage = {
@@ -65,7 +66,7 @@ export async function adminListParticipants(): Promise<AdminParticipant[]> {
   const rows = await sql`
     SELECT id, name, record_or_birth, contact, research_types, consent_agreed, applied_at,
            patient_code, sms_notified, sms_error, study_start_date::text AS study_start_date, access_token,
-           enrolled, enrolled_at, gender
+           enrolled, enrolled_at, gender, remark
     FROM participants ORDER BY applied_at DESC LIMIT 200
   `;
   return serialize(rows) as AdminParticipant[];
@@ -76,6 +77,15 @@ export async function adminAssignPatientCode(id: string, patientCode: string): P
   const code = String(patientCode ?? "").trim();
   if (!isUuid(id) || !code || code.length > 32) return { ok: false };
   await sql`UPDATE participants SET patient_code = ${code} WHERE id = ${id}`;
+  return { ok: true };
+}
+
+/** 비고 - free-text admin note on an applicant (e.g. 참여거부). Empty clears it. */
+export async function adminSetRemark(id: string, remark: string): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const value = String(remark ?? "").trim();
+  if (!isUuid(id) || value.length > 200) return { ok: false };
+  await sql`UPDATE participants SET remark = ${value === "" ? null : value} WHERE id = ${id}`;
   return { ok: true };
 }
 
