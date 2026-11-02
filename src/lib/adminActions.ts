@@ -179,6 +179,20 @@ export async function adminGetPatientDashboard(patientCode: string): Promise<{
   };
 }
 
+/** The latest 다음 외래 the patient entered in a 증상 설문 (date/time in Korea time), if any. */
+export async function adminGetNextVisit(
+  patientCode: string
+): Promise<{ date: string; time: string; past: boolean } | null> {
+  await requireAdmin();
+  const [r] = await sql`
+    SELECT visit_date::text AS date, to_char(visit_time, 'HH24:MI') AS time,
+           (((visit_date + visit_time) AT TIME ZONE 'Asia/Seoul') <= NOW()) AS past
+    FROM clinic_visits WHERE patient_code = ${patientCode}
+    ORDER BY visit_date DESC, visit_time DESC LIMIT 1
+  `;
+  return r ? { date: String(r.date), time: String(r.time), past: Boolean(r.past) } : null;
+}
+
 // ── Researcher Notes (per patient, free text + date; stored in the nursing_notes table) ──────────────────
 
 export type ResearcherNote = {

@@ -12,7 +12,7 @@ import { QLQ_QUESTIONS } from "./qlq-c30";
 import { sendSms } from "./solapi";
 import { headers } from "next/headers";
 import { clientIp, rateLimit } from "./rateLimit";
-import { formatMonthDay, kstToday, qlqStatus } from "./surveySchedule";
+import { formatMonthDay, kstToday, qlqStatus, qlqWindow } from "./surveySchedule";
 
 /** 증상 설문 reopens this many days after the previous one was completed. */
 const PRO_REOPEN_AFTER_DAYS = 6;
@@ -160,8 +160,8 @@ export type SurveyAvailability = {
  * Which surveys this patient can start right now.
  *  - w0 (기본정보): once. Locked after it has been submitted.
  *  - pro_ctcae (증상): free the first time, then 6 days after the last completion.
- *  - qlq_c30 (삶의 질): only in the Mon–Sun week containing each 12-week mark
- *    after the participant's start date, and once per window.
+ *  - qlq_c30 (삶의 질): once at the start (Baseline), then only in the Mon–Sun week
+ *    containing each 12-week mark after the participant's start date, once per window.
  */
 export async function getSurveyAvailability(code: string): Promise<Record<SurveyType, SurveyAvailability>> {
   const result: Record<SurveyType, SurveyAvailability> = {
@@ -200,12 +200,28 @@ export async function getSurveyAvailability(code: string): Promise<Record<Survey
     SELECT study_start_date::text AS start FROM participants WHERE patient_code = ${code} ORDER BY applied_at LIMIT 1
   `;
   const start: string | null = p?.start ?? null;
-  if (!start) {
-    result.qlq_c30 = { open: false, label: "대기", note: "첫 설문을 시작하신 뒤 12주째 주에 열립니다." };
+  const today = kstToday();
+
+  // Baseline: before the first 12-week window the survey is open until it has been filled once.
+  if (!start || today < qlqWindow(start, 1).from) {
+    const [baselineDone] = await sql`
+      SELECT 1 FROM survey_sessions
+      WHERE patient_code = ${code} AND survey_type = 'qlq_c30' AND is_complete = TRUE LIMIT 1
+    `;
+    if (!baselineDone) {
+      result.qlq_c30 = { open: true, note: "처음 한 번 작성하는 기본(Baseline) 삶의 질 설문이에요." };
+    } else {
+      const first = qlqWindow(start ?? today, 1);
+      result.qlq_c30 = {
+        open: false,
+        label: "완료",
+        note: `기본(Baseline) 삶의 질 설문을 완료하셨어요. 다음: ${formatMonthDay(first.from)} ~ ${formatMonthDay(first.to)}`,
+      };
+    }
     return result;
   }
 
-  const { current, next } = qlqStatus(start, kstToday());
+  const { current, next } = qlqStatus(start, today);
   if (!current) {
     result.qlq_c30 = {
       open: false,
@@ -291,6 +307,40 @@ async function sexForSession(sessionId: string): Promise<Sex | null> {
   return parseSex(rows[0]?.gender);
 }
 
+// ── 다음 외래 일정 ───────────────────────────────────────────────
+
+export type NextVisitInput = { date: string; time: string } | { unknown: true };
+
+/**
+ * True when no upcoming 외래 is on file for this patient — i.e. the question should be asked.
+ * Once a visit is recorded it stays "answered" until that date/time has passed.
+ */
+async function nextVisitDue(code: string | null): Promise<boolean> {
+  if (!code) return false;
+  const [upcoming] = await sql`
+    SELECT 1 FROM clinic_visits
+    WHERE patient_code = ${code}
+      AND ((visit_date + visit_time) AT TIME ZONE 'Asia/Seoul') > NOW()
+    LIMIT 1
+  `;
+  return !upcoming;
+}
+
+/** A valid future visit, "unknown", or null when the input is unusable. */
+function parseNextVisit(v: unknown): { date: string; time: string } | "unknown" | null {
+  if (!v || typeof v !== "object") return null;
+  if ((v as { unknown?: unknown }).unknown === true) return "unknown";
+  const { date, time } = v as { date?: unknown; time?: unknown };
+  if (typeof date !== "string" || typeof time !== "string") return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return null;
+  const [y, m, d] = date.split("-").map(Number);
+  const check = new Date(Date.UTC(y, m - 1, d));
+  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== m - 1 || check.getUTCDate() !== d) return null;
+  if (new Date(`${date}T${time}:00+09:00`).getTime() <= Date.now()) return null; // already past
+  if (date > addDays(kstToday(), 366)) return null;
+  return { date, time };
+}
+
 export type ProCtcaeAnswer = { item_id: number; question_key: string; value: number | boolean };
 
 const PRO_QUESTIONS = new Map(
@@ -299,7 +349,9 @@ const PRO_QUESTIONS = new Map(
 
 export async function loadProCtcaeSession(
   sessionId: string
-): Promise<{ status: "ok"; answers: ProCtcaeAnswer[]; sex: Sex | null } | { status: "complete" | "not_found" }> {
+): Promise<
+  { status: "ok"; answers: ProCtcaeAnswer[]; sex: Sex | null; askNextVisit: boolean } | { status: "complete" | "not_found" }
+> {
   const open = await getOpenSession(sessionId, "pro_ctcae");
   if (open.error) return { status: open.error };
   const rows = await sql`
@@ -309,6 +361,7 @@ export async function loadProCtcaeSession(
   return {
     status: "ok",
     sex: await sexForSession(sessionId),
+    askNextVisit: await nextVisitDue(await getSessionPatientCode(sessionId)),
     answers: rows.map((r) => ({
       item_id: r.item_id,
       question_key: r.question_key,
@@ -375,7 +428,8 @@ export async function clearProCtcaeAnswers(
 
 export async function submitProCtcae(
   sessionId: string,
-  additionalComment: string
+  additionalComment: string,
+  nextVisit?: NextVisitInput | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const open = await getOpenSession(sessionId, "pro_ctcae");
   if (open.error) return { ok: false, error: open.error };
@@ -387,6 +441,20 @@ export async function submitProCtcae(
     WHERE session_id = ${sessionId} AND item_id <> ALL(${excludedItemIds}::int[])
   `;
   if (n < required) return { ok: false, error: "incomplete" };
+
+  // 다음 외래: asked only while no upcoming visit is on file.
+  const code = await getSessionPatientCode(sessionId);
+  if (await nextVisitDue(code)) {
+    const visit = parseNextVisit(nextVisit);
+    if (!visit) return { ok: false, error: "next_visit_required" };
+    if (visit !== "unknown") {
+      await sql`
+        INSERT INTO clinic_visits (patient_code, session_id, visit_date, visit_time)
+        VALUES (${code}, ${sessionId}, ${visit.date}::date, ${visit.time}::time)
+        ON CONFLICT (session_id) DO UPDATE SET visit_date = EXCLUDED.visit_date, visit_time = EXCLUDED.visit_time
+      `;
+    }
+  }
   const comment = String(additionalComment ?? "").trim().slice(0, 5000) || null;
   await sql`
     UPDATE survey_sessions SET is_complete = TRUE, completed_at = NOW(), additional_comments = ${comment}

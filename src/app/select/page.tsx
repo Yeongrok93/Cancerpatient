@@ -28,7 +28,7 @@ const SURVEYS = [
     step: 3,
     title: "삶의 질 설문",
     subtitle: "삶의 질 평가",
-    description: "30문항 · 약 5~10분 · 12주마다",
+    description: "30문항 · 약 5~10분 · 처음 한 번 + 12주마다",
     color: "border-blue-200 hover:border-blue-400",
     route: "/survey/qlq-c30",
   },
@@ -42,7 +42,7 @@ function SelectContent() {
   // Most recent unfinished PRO-CTCAE session for this patient, if any —
   // re-entering the survey continues it instead of starting a blank one.
   const [resumeSessionId, setResumeSessionId] = useState<string | null>(null);
-  // Which surveys are open right now (기본정보는 1회, 삶의 질은 12주마다).
+  // Which surveys are open right now (기본정보는 1회, 삶의 질은 처음 1회 + 12주마다).
   const [availability, setAvailability] = useState<Record<string, SurveyAvailability> | null>(null);
 
   useEffect(() => {

@@ -65,7 +65,7 @@ export default function StartPage() {
               <span className="font-semibold">매주 참여 사례비 지급</span>
               <ul className="mt-1 ml-4 space-y-0.5 text-gray-600 list-disc list-inside">
                 <li>매주 1회 증상부담 설문 작성 시: <span className="font-medium text-gray-800">10,000원</span> 상당 모바일 쿠폰 발송</li>
-                <li>분기별 주차 (증상부담 + 삶의 질 설문 함께 작성 시): <span className="font-medium text-gray-800">20,000원</span> 상당 모바일 쿠폰 발송</li>
+                <li>분기별 주차 (12주마다, 증상부담 + 삶의 질 설문 함께 작성 시): <span className="font-medium text-gray-800">20,000원</span> 상당 모바일 쿠폰 발송</li>
               </ul>
               <p className="mt-1 text-xs text-gray-500">※ 해당 주차에 설문 제출을 최종 완료하시면 확인 후 1주 이내에 즉시 휴대폰으로 발송됩니다.</p>
             </li>

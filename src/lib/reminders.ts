@@ -9,7 +9,7 @@
 
 import { sql } from "./db";
 import { sendSms } from "./solapi";
-import { kstToday } from "./surveySchedule";
+import { kstToday, qlqWindow } from "./surveySchedule";
 import { patientLabel } from "./patientLabel";
 
 export const REMINDER_AFTER_DAYS = 7;
@@ -76,7 +76,10 @@ export async function runReminders(opts: { dryRun?: boolean; today?: string } = 
       (SELECT count(*)::int FROM survey_sessions s
         WHERE s.patient_code = p.patient_code AND s.survey_type = 'pro_ctcae' AND s.is_complete) AS done_count,
       (SELECT count(*)::int FROM survey_sessions s
-        WHERE s.patient_code = p.patient_code AND s.survey_type = 'qlq_c30' AND s.is_complete) AS qlq_count
+        WHERE s.patient_code = p.patient_code AND s.survey_type = 'qlq_c30' AND s.is_complete) AS qlq_count,
+      (SELECT (min(s.completed_at) AT TIME ZONE 'Asia/Seoul')::date::text FROM survey_sessions s
+        WHERE s.patient_code = p.patient_code AND s.survey_type = 'qlq_c30' AND s.is_complete) AS first_qlq,
+      p.study_start_date::text AS start_date
     FROM participants p
     WHERE p.enrolled = TRUE AND p.patient_code IS NOT NULL AND p.access_token IS NOT NULL
       AND p.research_types LIKE '%설문조사%'
@@ -94,7 +97,9 @@ export async function runReminders(opts: { dryRun?: boolean; today?: string } = 
     const phone = String(r.contact ?? "").replace(/\D/g, "");
     if (!/^01\d{8,9}$/.test(phone)) { result.skipped.push({ patient_code: code, reason: "연락처 형식 오류" }); continue; }
 
-    const amount = rewardTotal(Number(r.done_count), Number(r.qlq_count));
+    // The Baseline 삶의 질 설문 (the one filled before the first 12-week window) is not paid.
+    const hasBaseline = r.first_qlq && (!r.start_date || r.first_qlq < qlqWindow(r.start_date, 1).from);
+    const amount = rewardTotal(Number(r.done_count), Number(r.qlq_count) - (hasBaseline ? 1 : 0));
     const text = buildReminderText(amount, `${SITE_URL}/s/${r.access_token}/pro`);
 
     if (dryRun) {

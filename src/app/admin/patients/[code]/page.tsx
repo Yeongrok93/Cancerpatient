@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { adminGetPatientDashboard, adminListPatients, type AdminPatient, type DashboardAnswer, type DashboardSession } from "@/lib/adminActions";
+import { adminGetNextVisit, adminGetPatientDashboard, adminListPatients, type AdminPatient, type DashboardAnswer, type DashboardSession } from "@/lib/adminActions";
 import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, itemApplies, type Sex, type SurveyItem, type QuestionType } from "@/lib/questions";
 import { computeItemGrade, GRADE_COLORS, GRADE_LABELS } from "@/lib/proctcaeGrading";
 import { patientLabel } from "@/lib/patientLabel";
@@ -108,6 +108,20 @@ export default function PatientDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [patients, setPatients] = useState<AdminPatient[]>([]);
   const [view, setView] = useState<ViewMode>("composite");
+  const [nextVisit, setNextVisit] = useState<{ date: string; time: string; past: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!code) return;
+    let cancelled = false;
+    adminGetNextVisit(code)
+      .then((v) => {
+        if (!cancelled) setNextVisit(v);
+      })
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
 
   useEffect(() => {
     if (!code) return;
@@ -281,6 +295,16 @@ export default function PatientDashboardPage() {
             >
               PDF (English)
             </a>
+            {nextVisit && (
+              <span
+                className={`text-xs px-3 py-1.5 rounded-lg font-medium ${
+                  nextVisit.past ? "bg-gray-100 text-gray-600" : "bg-amber-50 text-amber-900 border border-amber-200"
+                }`}
+              >
+                {nextVisit.past ? "지난 외래" : "다음 외래"} {nextVisit.date.slice(5).replace("-", "/")}{" "}
+                {["일", "월", "화", "수", "목", "금", "토"][new Date(`${nextVisit.date}T00:00:00Z`).getUTCDay()]} {nextVisit.time}
+              </span>
+            )}
           </div>
 
           {/* 다른 환자로 이동 */}

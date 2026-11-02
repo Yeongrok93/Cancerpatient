@@ -21,6 +21,12 @@ import {
 } from "@/lib/questions";
 import QuestionItem from "@/components/QuestionItem";
 import ProgressBar from "@/components/ProgressBar";
+import NextVisitField, {
+  EMPTY_VISIT,
+  visitDraftInput,
+  visitDraftIsValid,
+  type VisitDraft,
+} from "@/components/NextVisitField";
 
 type AnswerMap = Record<string, number | boolean | null>;
 
@@ -61,6 +67,10 @@ function SurveyContent() {
   const [submitting, setSubmitting] = useState(false);
   const [errorItemIds, setErrorItemIds] = useState<Set<number>>(new Set());
   const [additionalComment, setAdditionalComment] = useState("");
+  // 다음 외래 일정 — only asked while no upcoming visit is on file (decided by the server).
+  const [askNextVisit, setAskNextVisit] = useState(false);
+  const [visit, setVisit] = useState<VisitDraft>(EMPTY_VISIT);
+  const [visitError, setVisitError] = useState(false);
   const firstErrorRef = useRef<HTMLDivElement>(null);
 
   const categories = getCategoriesFor(sex);
@@ -107,6 +117,7 @@ function SurveyContent() {
       );
       setAnswers(map);
       setSex(loadedSex);
+      setAskNextVisit(res.askNextVisit);
       setCategoryIdx(firstOpen === -1 ? cats.length - 1 : firstOpen);
       setResumed(Object.keys(map).length > 0);
       setLoaded(true);
@@ -234,6 +245,11 @@ function SurveyContent() {
   }, [sessionId, currentItems, answers]);
 
   async function handleNext() {
+    if (categoryIdx === 0 && askNextVisit && !visitDraftIsValid(visit)) {
+      setVisitError(true);
+      document.getElementById("next-visit")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     const unanswered = getUnansweredItems(currentItems);
     if (unanswered.length > 0) {
       const ids = new Set(unanswered.map((i) => i.id));
@@ -277,10 +293,18 @@ function SurveyContent() {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
+    if (askNextVisit && !visitDraftIsValid(visit)) {
+      // The question sits on the first screen; a resumed survey may have skipped past it.
+      alert("첫 화면의 '다음 외래 날짜와 시간'을 먼저 골라 주세요. 첫 화면으로 이동합니다.");
+      setVisitError(true);
+      setCategoryIdx(0);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     setSubmitting(true);
     try {
       await saveCurrentCategory();
-      const result = await submitProCtcae(sessionId, additionalComment);
+      const result = await submitProCtcae(sessionId, additionalComment, askNextVisit ? visitDraftInput(visit) : null);
       if (!result.ok) throw new Error(result.error);
       router.push(`/survey/complete?session=${sessionId}`);
     } catch (err) {
@@ -325,6 +349,18 @@ function SurveyContent() {
         <div className="bg-red-50 border-2 border-red-300 rounded-xl px-4 py-3 text-base text-red-800">
           ⚠ 답변이 저장되지 않았어요. 인터넷 연결을 확인해 주세요.
         </div>
+      )}
+
+      {/* 다음 외래 일정 (first screen) */}
+      {categoryIdx === 0 && askNextVisit && (
+        <NextVisitField
+          value={visit}
+          onChange={(v) => {
+            setVisit(v);
+            setVisitError(false);
+          }}
+          showError={visitError}
+        />
       )}
 
       {/* Progress */}
