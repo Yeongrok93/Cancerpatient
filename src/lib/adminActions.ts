@@ -531,3 +531,79 @@ export async function adminSetSessionDate(sessionId: string, date: string): Prom
   `;
   return rows.length === 0 ? { ok: false, error: "완료된 설문을 찾을 수 없습니다." } : { ok: true };
 }
+
+// ── 임상정보 (연구자 입력) ──────────────────────────────────────────────────────────────
+
+export type ClinicalInfo = {
+  adc_drug: string;
+  cancer_type: string;
+  cancer_stage: "" | "I" | "II" | "III" | "IV";
+  tx_line: string; // digits or ""
+  ecog: string; // "0".."4" or ""
+  comorbidity_count: string; // digits or ""
+  comorbidity_names: string;
+};
+
+export async function adminGetClinicalInfo(patientCode: string): Promise<ClinicalInfo> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  const [r] = code ? await sql`SELECT * FROM clinical_info WHERE patient_code = ${code}` : [];
+  const str = (v: unknown) => (v === null || v === undefined ? "" : String(v));
+  return {
+    adc_drug: str(r?.adc_drug),
+    cancer_type: str(r?.cancer_type),
+    cancer_stage: str(r?.cancer_stage) as ClinicalInfo["cancer_stage"],
+    tx_line: str(r?.tx_line),
+    ecog: str(r?.ecog),
+    comorbidity_count: str(r?.comorbidity_count),
+    comorbidity_names: str(r?.comorbidity_names),
+  };
+}
+
+export async function adminSaveClinicalInfo(
+  patientCode: string,
+  info: ClinicalInfo
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  if (!code) return { ok: false, error: "잘못된 요청입니다." };
+  const [known] = await sql`SELECT 1 FROM participants WHERE patient_code = ${code} LIMIT 1`;
+  if (!known) return { ok: false, error: "알 수 없는 환자입니다." };
+
+  const text = (v: unknown, max: number) => {
+    const t = String(v ?? "").trim();
+    return t.length > max ? null : t === "" ? "" : t;
+  };
+  const adc = text(info?.adc_drug, 200);
+  const cancer = text(info?.cancer_type, 200);
+  const names = text(info?.comorbidity_names, 2000);
+  if (adc === null || cancer === null || names === null) return { ok: false, error: "입력이 너무 깁니다." };
+
+  const stage = String(info?.cancer_stage ?? "").trim();
+  if (stage !== "" && !["I", "II", "III", "IV"].includes(stage)) return { ok: false, error: "병기를 확인해 주세요." };
+
+  const int = (v: unknown, min: number, max: number): number | null | "bad" => {
+    const t = String(v ?? "").trim();
+    if (t === "") return null;
+    if (!/^\d{1,3}$/.test(t)) return "bad";
+    const n = Number(t);
+    return n < min || n > max ? "bad" : n;
+  };
+  const tx = int(info?.tx_line, 0, 50);
+  const ecog = int(info?.ecog, 0, 4);
+  const cc = int(info?.comorbidity_count, 0, 50);
+  if (tx === "bad") return { ok: false, error: "치료 차수를 확인해 주세요 (0~50)." };
+  if (ecog === "bad") return { ok: false, error: "ECOG는 0~4 사이 숫자로 입력해 주세요." };
+  if (cc === "bad") return { ok: false, error: "동반질환 개수를 확인해 주세요 (0~50)." };
+
+  const nul = (t: string) => (t === "" ? null : t);
+  await sql`
+    INSERT INTO clinical_info (patient_code, adc_drug, cancer_type, cancer_stage, tx_line, ecog, comorbidity_count, comorbidity_names, updated_at)
+    VALUES (${code}, ${nul(adc)}, ${nul(cancer)}, ${nul(stage)}, ${tx}, ${ecog}, ${cc}, ${nul(names)}, NOW())
+    ON CONFLICT (patient_code) DO UPDATE SET
+      adc_drug = EXCLUDED.adc_drug, cancer_type = EXCLUDED.cancer_type, cancer_stage = EXCLUDED.cancer_stage,
+      tx_line = EXCLUDED.tx_line, ecog = EXCLUDED.ecog, comorbidity_count = EXCLUDED.comorbidity_count,
+      comorbidity_names = EXCLUDED.comorbidity_names, updated_at = NOW()
+  `;
+  return { ok: true };
+}

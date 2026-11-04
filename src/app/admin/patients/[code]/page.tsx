@@ -56,8 +56,8 @@ function ViewToggle({ view, onChange, rawCount }: { view: ViewMode; onChange: (v
   const options: [ViewMode, string][] = [
     ["composite", "Composite Grade"],
     ["raw", `전체 문항 (${rawCount})`],
-    ["notes", "Researcher Notes"],
     ["qlq", "삶의 질 (QLQ)"],
+    ["notes", "Researcher Notes"],
     ["info", "기본정보·수정"],
   ];
   const index = options.findIndex(([mode]) => mode === view);

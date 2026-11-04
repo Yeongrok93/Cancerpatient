@@ -5,6 +5,9 @@
 
 import { useEffect, useState } from "react";
 import {
+  adminGetClinicalInfo,
+  adminSaveClinicalInfo,
+  type ClinicalInfo,
   adminGetParticipantInfo,
   adminGetW0,
   adminSetW0Answer,
@@ -26,6 +29,16 @@ import {
 type Answers = NonNullable<AdminW0>["answers"];
 
 const inputCls = "h-9 px-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white";
+
+const EMPTY_CLINICAL: ClinicalInfo = {
+  adc_drug: "",
+  cancer_type: "",
+  cancer_stage: "",
+  tx_line: "",
+  ecog: "",
+  comorbidity_count: "",
+  comorbidity_names: "",
+};
 
 type CtlProps = { answers: Answers; onSave: (key: string, value: number | string | null) => void };
 
@@ -113,6 +126,9 @@ export default function PatientInfoEditor({ code }: { code: string }) {
   const [info, setInfo] = useState<ParticipantInfo | null>(null);
   const [draft, setDraft] = useState({ name: "", record_or_birth: "", contact: "", gender: "", study_start_date: "", remark: "" });
   const [w0, setW0] = useState<AdminW0>(null);
+  const [clinical, setClinical] = useState<ClinicalInfo>(EMPTY_CLINICAL);
+  const [clinMsg, setClinMsg] = useState("");
+  const [savingClin, setSavingClin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [infoMsg, setInfoMsg] = useState("");
   const [w0Msg, setW0Msg] = useState("");
@@ -121,9 +137,10 @@ export default function PatientInfoEditor({ code }: { code: string }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([adminGetParticipantInfo(code), adminGetW0(code)])
-      .then(([p, w]) => {
+    Promise.all([adminGetParticipantInfo(code), adminGetW0(code), adminGetClinicalInfo(code)])
+      .then(([p, w, c]) => {
         if (cancelled) return;
+        setClinical(c);
         setInfo(p);
         setW0(w);
         if (p) {
@@ -148,6 +165,15 @@ export default function PatientInfoEditor({ code }: { code: string }) {
       cancelled = true;
     };
   }, [code]);
+
+  async function saveClinical() {
+    if (savingClin) return;
+    setSavingClin(true);
+    setClinMsg("");
+    const res = await adminSaveClinicalInfo(code, clinical).catch(() => ({ ok: false as const, error: "저장에 실패했습니다." }));
+    setSavingClin(false);
+    setClinMsg(res.ok ? "저장했어요." : res.error);
+  }
 
   async function saveInfo() {
     if (!info || savingInfo) return;
@@ -192,6 +218,70 @@ export default function PatientInfoEditor({ code }: { code: string }) {
 
   return (
     <div className="p-5 space-y-8">
+      {/* 임상정보: 연구자가 입력 (환자 설문에는 없음) */}
+      <section className="space-y-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h2 className="text-sm font-bold text-gray-900">임상정보</h2>
+          <span className="text-xs text-gray-500">연구자 입력 · 환자 설문에는 나오지 않아요</span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-3xl">
+          <Field label="투약 ADC 약제명">
+            <input className={`${inputCls} w-full`} value={clinical.adc_drug} onChange={(e) => setClinical({ ...clinical, adc_drug: e.target.value })} placeholder="약제명 기재" />
+          </Field>
+          <Field label="암 진단명">
+            <input className={`${inputCls} w-full`} value={clinical.cancer_type} onChange={(e) => setClinical({ ...clinical, cancer_type: e.target.value })} placeholder="병명 기재" />
+          </Field>
+          <Field label="병기">
+            <select
+              className={`${inputCls} w-full`}
+              value={clinical.cancer_stage}
+              onChange={(e) => setClinical({ ...clinical, cancer_stage: e.target.value as ClinicalInfo["cancer_stage"] })}
+            >
+              <option value="">(미입력)</option>
+              {["I", "II", "III", "IV"].map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="치료 차수 (숫자, 예: 1)">
+            <input className={`${inputCls} w-full`} inputMode="numeric" value={clinical.tx_line} onChange={(e) => setClinical({ ...clinical, tx_line: e.target.value })} />
+          </Field>
+          <Field label="ECOG 전신수행능력 (연구자 평가, 0~4)">
+            <input className={`${inputCls} w-full`} inputMode="numeric" value={clinical.ecog} onChange={(e) => setClinical({ ...clinical, ecog: e.target.value })} />
+          </Field>
+          <Field label="동반질환 개수 (숫자)">
+            <input
+              className={`${inputCls} w-full`}
+              inputMode="numeric"
+              value={clinical.comorbidity_count}
+              onChange={(e) => setClinical({ ...clinical, comorbidity_count: e.target.value })}
+            />
+          </Field>
+          <div className="sm:col-span-2">
+            <Field label="동반질환 진단명 (모두 기재)">
+              <textarea
+                rows={2}
+                className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white"
+                value={clinical.comorbidity_names}
+                onChange={(e) => setClinical({ ...clinical, comorbidity_names: e.target.value })}
+              />
+            </Field>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={saveClinical}
+            disabled={savingClin}
+            className="px-4 py-2 rounded-lg bg-gray-900 text-white text-sm font-semibold hover:bg-black disabled:bg-gray-200 disabled:text-gray-400"
+          >
+            {savingClin ? "저장 중..." : "임상정보 저장"}
+          </button>
+          <span className="text-xs text-gray-600">{clinMsg}</span>
+        </div>
+      </section>
+
       {/* 신청 정보 */}
       <section className="space-y-3">
         <h2 className="text-sm font-bold text-gray-900">참여자 정보</h2>

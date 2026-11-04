@@ -25,8 +25,6 @@ function daysBetween(from: string, to: string): number {
   return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 }
 
-const QUICK_KINDS: NoteKind[] = ["call", "missed", "sms"];
-
 function KindBadge({ kind }: { kind: NoteKind }) {
   const info = NOTE_KIND_BY_KEY[kind];
   return <span className={`inline-block px-2 py-0.5 rounded-full border text-xs font-semibold ${info.chip}`}>{info.label}</span>;
@@ -43,7 +41,6 @@ function ContactSummary({ notes }: { notes: ResearcherNote[] }) {
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-gray-50 border border-gray-200 px-4 py-2.5 text-sm text-gray-800">
       <span className="font-semibold">연락 기록</span>
       <span>통화 {count("call")}회</span>
-      <span>부재중 {count("missed")}회</span>
       <span>문자 {count("sms")}회</span>
       <span className="text-gray-600">
         마지막 연락 {formatNoteDate(last)} · {ago <= 0 ? "오늘" : `${ago}일 전`}
@@ -134,24 +131,7 @@ export default function ResearcherNotes({
 
       {/* 새 기록 */}
       <div className="rounded-xl border border-gray-200 p-4 space-y-3">
-        {/* 한 번에 기록: 오늘 날짜로 바로 저장 (아래 입력란에 내용이 있으면 함께 저장) */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium text-gray-900 mr-1">빠른 기록 (오늘)</span>
-          {QUICK_KINDS.map((k) => (
-            <button
-              key={k}
-              type="button"
-              disabled={saving}
-              onClick={() => add(k, kstToday(), draftBody)}
-              className={`px-3 py-1.5 rounded-lg border text-sm font-semibold hover:brightness-95 disabled:opacity-50 ${NOTE_KIND_BY_KEY[k].chip}`}
-            >
-              + {NOTE_KIND_BY_KEY[k].label}
-            </button>
-          ))}
-          <span className="text-xs text-gray-500">누르면 바로 저장돼요. 내용을 적어 두었으면 함께 저장돼요.</span>
-        </div>
-
-        <div className="border-t border-gray-100 pt-3 space-y-3">
+        <div className="space-y-3">
           <div className="flex items-center gap-2 flex-wrap" role="radiogroup" aria-label="기록 종류">
             {NOTE_KINDS.map((k) => (
               <button

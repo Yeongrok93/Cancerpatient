@@ -174,3 +174,17 @@ CREATE INDEX IF NOT EXISTS idx_clinic_visits_patient ON clinic_visits (patient_c
 -- Researcher Notes: kind of entry (call / missed / sms / visit / intervention / external / note).
 -- Contact-type entries may have an empty body. See src/lib/noteKinds.ts.
 ALTER TABLE nursing_notes ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'note';
+
+-- 임상정보 (연구자 입력, 환자 설문에는 없음): one row per participant code.
+-- ecog here is the researcher-assessed ECOG, separate from the patient-reported ECOG in the 기본정보 설문 (w0_answers).
+CREATE TABLE IF NOT EXISTS clinical_info (
+  patient_code      TEXT PRIMARY KEY,
+  adc_drug          TEXT,
+  cancer_type       TEXT,
+  cancer_stage      TEXT CHECK (cancer_stage IN ('I', 'II', 'III', 'IV')),
+  tx_line           INTEGER CHECK (tx_line BETWEEN 0 AND 50),
+  ecog              INTEGER CHECK (ecog BETWEEN 0 AND 4),
+  comorbidity_count INTEGER CHECK (comorbidity_count BETWEEN 0 AND 50),
+  comorbidity_names TEXT,
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
