@@ -63,7 +63,7 @@ export async function loadReportInput(code: string, opts: LoadReportOptions = {}
   // The notes are never printed on the hand-out. Their text only decides which symptoms are put first and
   // starred in the summary (matched by name, locally — nothing is sent to an API).
   const noteRows = await sql`
-    SELECT body FROM nursing_notes WHERE patient_code = ${code} ORDER BY note_date DESC, created_at DESC
+    SELECT body FROM nursing_notes WHERE patient_code = ${code} AND body <> '' ORDER BY note_date DESC, created_at DESC
   `;
   const notesText = noteRows.map((n) => String(n.body)).join("\n");
   const notes: NotesSummary = { kind: "none" };

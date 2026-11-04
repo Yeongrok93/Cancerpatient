@@ -13,6 +13,7 @@ import { sendSms } from "./solapi";
 import { headers } from "next/headers";
 import { clientIp, rateLimit } from "./rateLimit";
 import { formatMonthDay, kstToday, qlqStatus, qlqWindow } from "./surveySchedule";
+import { rewardTotal } from "./rewards";
 
 /** 증상 설문 reopens this many days after the previous one was completed. */
 const PRO_REOPEN_AFTER_DAYS = 6;
@@ -307,6 +308,26 @@ async function sexForSession(sessionId: string): Promise<Sex | null> {
   return parseSex(rows[0]?.gender);
 }
 
+/**
+ * 적립금 earned from surveys already completed (the one being filled in is not complete yet, so it
+ * is not counted). The Baseline 삶의 질 설문 is unpaid. Same rule as the weekly reminder text.
+ */
+async function rewardSoFar(code: string | null): Promise<number> {
+  if (!code) return 0;
+  const [r] = await sql`
+    SELECT
+      (SELECT count(*)::int FROM survey_sessions s
+        WHERE s.patient_code = ${code} AND s.survey_type = 'pro_ctcae' AND s.is_complete) AS pro_count,
+      (SELECT count(*)::int FROM survey_sessions s
+        WHERE s.patient_code = ${code} AND s.survey_type = 'qlq_c30' AND s.is_complete) AS qlq_count,
+      (SELECT (min(s.completed_at) AT TIME ZONE 'Asia/Seoul')::date::text FROM survey_sessions s
+        WHERE s.patient_code = ${code} AND s.survey_type = 'qlq_c30' AND s.is_complete) AS first_qlq,
+      (SELECT p.study_start_date::text FROM participants p WHERE p.patient_code = ${code} ORDER BY p.applied_at LIMIT 1) AS start_date
+  `;
+  const hasBaseline = r.first_qlq && (!r.start_date || r.first_qlq < qlqWindow(r.start_date, 1).from);
+  return rewardTotal(Number(r.pro_count), Number(r.qlq_count) - (hasBaseline ? 1 : 0));
+}
+
 // ── 다음 외래 일정 ───────────────────────────────────────────────
 
 export type NextVisitInput = { date: string; time: string } | { unknown: true };
@@ -350,7 +371,8 @@ const PRO_QUESTIONS = new Map(
 export async function loadProCtcaeSession(
   sessionId: string
 ): Promise<
-  { status: "ok"; answers: ProCtcaeAnswer[]; sex: Sex | null; askNextVisit: boolean } | { status: "complete" | "not_found" }
+  | { status: "ok"; answers: ProCtcaeAnswer[]; sex: Sex | null; askNextVisit: boolean; rewardSoFar: number }
+  | { status: "complete" | "not_found" }
 > {
   const open = await getOpenSession(sessionId, "pro_ctcae");
   if (open.error) return { status: open.error };
@@ -358,10 +380,12 @@ export async function loadProCtcaeSession(
     SELECT item_id, question_key, question_type, answer_value, answer_boolean
     FROM survey_answers WHERE session_id = ${sessionId}
   `;
+  const code = await getSessionPatientCode(sessionId);
   return {
     status: "ok",
     sex: await sexForSession(sessionId),
-    askNextVisit: await nextVisitDue(await getSessionPatientCode(sessionId)),
+    askNextVisit: await nextVisitDue(code),
+    rewardSoFar: await rewardSoFar(code),
     answers: rows.map((r) => ({
       item_id: r.item_id,
       question_key: r.question_key,

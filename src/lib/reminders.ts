@@ -11,11 +11,10 @@ import { sql } from "./db";
 import { sendSms } from "./solapi";
 import { kstToday, qlqWindow } from "./surveySchedule";
 import { patientLabel } from "./patientLabel";
+import { rewardTotal } from "./rewards";
 
 export const REMINDER_AFTER_DAYS = 7;
 const LATE_GRACE_DAYS = 2;
-const REWARD_PER_SURVEY = 10_000; // 원, per completed 증상 설문
-const REWARD_PER_QLQ = 10_000; // 원, added on top when the 삶의 질 설문 of a quarterly week is completed (= 20,000원 that week)
 export const FOLLOWUP_AFTER_DAYS = 1; // 24h without a response after the reminder → tell the researcher
 const FOLLOWUP_WINDOW_DAYS = 6; // …but not for reminders older than this
 const SITE_URL = (process.env.SITE_URL ?? "https://cancerpatient.vercel.app").replace(/\/+$/, "");
@@ -23,10 +22,6 @@ const SITE_URL = (process.env.SITE_URL ?? "https://cancerpatient.vercel.app").re
 function addDays(date: string, days: number): string {
   const [y, m, d] = date.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d) + days * 86_400_000).toISOString().slice(0, 10);
-}
-
-export function rewardTotal(proDone: number, qlqDone: number): number {
-  return proDone * REWARD_PER_SURVEY + qlqDone * REWARD_PER_QLQ;
 }
 
 export function buildReminderText(totalWon: number, link: string): string {

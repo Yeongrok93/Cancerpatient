@@ -170,3 +170,7 @@ CREATE TABLE IF NOT EXISTS clinic_visits (
 );
 
 CREATE INDEX IF NOT EXISTS idx_clinic_visits_patient ON clinic_visits (patient_code, visit_date DESC, visit_time DESC);
+
+-- Researcher Notes: kind of entry (call / missed / sms / visit / intervention / external / note).
+-- Contact-type entries may have an empty body. See src/lib/noteKinds.ts.
+ALTER TABLE nursing_notes ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'note';

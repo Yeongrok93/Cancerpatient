@@ -71,6 +71,8 @@ function SurveyContent() {
   const [askNextVisit, setAskNextVisit] = useState(false);
   const [visit, setVisit] = useState<VisitDraft>(EMPTY_VISIT);
   const [visitError, setVisitError] = useState(false);
+  // 적립금 from surveys already completed (this one is not counted).
+  const [reward, setReward] = useState(0);
   const firstErrorRef = useRef<HTMLDivElement>(null);
 
   const categories = getCategoriesFor(sex);
@@ -118,6 +120,7 @@ function SurveyContent() {
       setAnswers(map);
       setSex(loadedSex);
       setAskNextVisit(res.askNextVisit);
+      setReward(res.rewardSoFar);
       setCategoryIdx(firstOpen === -1 ? cats.length - 1 : firstOpen);
       setResumed(Object.keys(map).length > 0);
       setLoaded(true);
@@ -339,6 +342,15 @@ function SurveyContent() {
 
   return (
     <div className="space-y-6">
+      {/* 적립금: 지금까지 완료한 설문 기준 (이번 설문 제외) */}
+      <div className="bg-amber-50 border-2 border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-base font-semibold text-amber-950">지금까지 쌓인 적립금</p>
+          <p className="text-sm text-amber-900">이번 설문은 제외한 금액이에요.</p>
+        </div>
+        <p className="text-2xl font-bold text-amber-950 whitespace-nowrap">{reward.toLocaleString("ko-KR")}원</p>
+      </div>
+
       {resumed && (
         <div className="bg-primary-50 border-2 border-primary-200 rounded-xl px-4 py-3 text-base text-primary-900">
           이전에 답하신 내용을 불러왔어요. 이어서 진행해 주세요.

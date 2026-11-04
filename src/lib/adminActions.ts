@@ -7,7 +7,17 @@
 import { cookies } from "next/headers";
 import { sql, serialize, isUuid } from "./db";
 import { ADMIN_COOKIE_NAME, isAdminToken } from "./adminAuth";
-import { parseSex, type Sex } from "./questions";
+import { parseSex, SURVEY_ITEMS, type Sex } from "./questions";
+import { NOTE_KIND_BY_KEY, parseNoteKind, type NoteKind } from "./noteKinds";
+import { QLQ_QUESTIONS } from "./qlq-c30";
+import {
+  DEMOGRAPHICS,
+  ECOG_KEY,
+  ECOG_OPTIONS,
+  EMERGENCY_SCREENING,
+  IPAQ_ITEMS,
+  SITTING_KEYS,
+} from "./w0";
 
 async function requireAdmin() {
   const cookie = (await cookies()).get(ADMIN_COOKIE_NAME)?.value;
@@ -193,12 +203,13 @@ export async function adminGetNextVisit(
   return r ? { date: String(r.date), time: String(r.time), past: Boolean(r.past) } : null;
 }
 
-// ── Researcher Notes (per patient, free text + date; stored in the nursing_notes table) ──────────────────
+// ── Researcher Notes (per patient, free text + date + kind; stored in the nursing_notes table) ──────────
 
 export type ResearcherNote = {
   id: string;
   patient_code: string;
   note_date: string; // YYYY-MM-DD
+  kind: NoteKind;
   body: string;
   created_at: string;
   updated_at: string;
@@ -206,11 +217,14 @@ export type ResearcherNote = {
 
 const MAX_NOTE_LENGTH = 20000;
 
-function cleanNote(date: string, body: string): { date: string; body: string } | null {
+function cleanNote(date: string, body: string, kind: unknown): { date: string; body: string; kind: NoteKind } | null {
   const d = String(date ?? "").trim();
+  const k = parseNoteKind(kind);
   const b = String(body ?? "").replace(/\s+$/, "");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(d)) || !b.trim() || b.length > MAX_NOTE_LENGTH) return null;
-  return { date: d, body: b };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(d)) || b.length > MAX_NOTE_LENGTH) return null;
+  // A call / missed call / text can be logged with no text; everything else needs some.
+  if (!b.trim() && !NOTE_KIND_BY_KEY[k].contact) return null;
+  return { date: d, body: b, kind: k };
 }
 
 export async function adminListNotes(patientCode: string): Promise<ResearcherNote[]> {
@@ -218,7 +232,7 @@ export async function adminListNotes(patientCode: string): Promise<ResearcherNot
   const code = String(patientCode ?? "").trim();
   if (!code) return [];
   const rows = await sql`
-    SELECT id, patient_code, note_date::text AS note_date, body, created_at, updated_at
+    SELECT id, patient_code, note_date::text AS note_date, kind, body, created_at, updated_at
     FROM nursing_notes WHERE patient_code = ${code}
     ORDER BY note_date DESC, created_at DESC
   `;
@@ -228,18 +242,19 @@ export async function adminListNotes(patientCode: string): Promise<ResearcherNot
 export async function adminAddNote(
   patientCode: string,
   date: string,
-  body: string
+  body: string,
+  kind: NoteKind = "note"
 ): Promise<{ ok: true; note: ResearcherNote } | { ok: false; error: string }> {
   await requireAdmin();
   const code = String(patientCode ?? "").trim();
-  const note = cleanNote(date, body);
+  const note = cleanNote(date, body, kind);
   if (!code || !note) return { ok: false, error: "날짜와 내용을 확인해 주세요." };
   const [known] = await sql`SELECT 1 FROM participants WHERE patient_code = ${code} LIMIT 1`;
   if (!known) return { ok: false, error: "알 수 없는 환자입니다." };
   const [row] = await sql`
-    INSERT INTO nursing_notes (patient_code, note_date, body)
-    VALUES (${code}, ${note.date}::date, ${note.body})
-    RETURNING id, patient_code, note_date::text AS note_date, body, created_at, updated_at
+    INSERT INTO nursing_notes (patient_code, note_date, body, kind)
+    VALUES (${code}, ${note.date}::date, ${note.body}, ${note.kind})
+    RETURNING id, patient_code, note_date::text AS note_date, kind, body, created_at, updated_at
   `;
   return { ok: true, note: serialize([row])[0] as ResearcherNote };
 }
@@ -247,15 +262,16 @@ export async function adminAddNote(
 export async function adminUpdateNote(
   id: string,
   date: string,
-  body: string
+  body: string,
+  kind: NoteKind = "note"
 ): Promise<{ ok: true; note: ResearcherNote } | { ok: false; error: string }> {
   await requireAdmin();
-  const note = cleanNote(date, body);
+  const note = cleanNote(date, body, kind);
   if (!isUuid(id) || !note) return { ok: false, error: "날짜와 내용을 확인해 주세요." };
   const rows = await sql`
-    UPDATE nursing_notes SET note_date = ${note.date}::date, body = ${note.body}, updated_at = NOW()
+    UPDATE nursing_notes SET note_date = ${note.date}::date, body = ${note.body}, kind = ${note.kind}, updated_at = NOW()
     WHERE id = ${id}
-    RETURNING id, patient_code, note_date::text AS note_date, body, created_at, updated_at
+    RETURNING id, patient_code, note_date::text AS note_date, kind, body, created_at, updated_at
   `;
   if (rows.length === 0) return { ok: false, error: "노트를 찾을 수 없습니다." };
   return { ok: true, note: serialize(rows)[0] as ResearcherNote };
@@ -266,4 +282,252 @@ export async function adminDeleteNote(id: string): Promise<{ ok: boolean }> {
   if (!isUuid(id)) return { ok: false };
   await sql`DELETE FROM nursing_notes WHERE id = ${id}`;
   return { ok: true };
+}
+
+// ── 참여자 기본정보 (신청 정보) 조회·수정 ────────────────────────────────────────────────
+
+export type ParticipantInfo = {
+  id: string;
+  name: string;
+  record_or_birth: string;
+  contact: string;
+  gender: Sex | null;
+  study_start_date: string | null;
+  remark: string | null;
+  applied_at: string;
+  enrolled: boolean;
+};
+
+export async function adminGetParticipantInfo(patientCode: string): Promise<ParticipantInfo | null> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  if (!code) return null;
+  const [r] = await sql`
+    SELECT id, name, record_or_birth, contact, gender, study_start_date::text AS study_start_date, remark, applied_at, enrolled
+    FROM participants WHERE patient_code = ${code} ORDER BY applied_at LIMIT 1
+  `;
+  return r ? (serialize([r])[0] as ParticipantInfo) : null;
+}
+
+export async function adminUpdateParticipantInfo(
+  id: string,
+  info: { name: string; record_or_birth: string; contact: string; gender: string; study_start_date: string; remark: string }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const name = String(info?.name ?? "").trim();
+  const birth = String(info?.record_or_birth ?? "").trim();
+  const contact = String(info?.contact ?? "").trim();
+  const genderRaw = String(info?.gender ?? "").trim();
+  const sex = parseSex(genderRaw);
+  const start = String(info?.study_start_date ?? "").trim();
+  const remark = String(info?.remark ?? "").trim();
+  if (!isUuid(id)) return { ok: false, error: "잘못된 요청입니다." };
+  if (!name || name.length > 50) return { ok: false, error: "이름을 확인해 주세요." };
+  if (!birth || birth.length > 32) return { ok: false, error: "생년월일을 확인해 주세요." };
+  if (!contact || contact.length > 32) return { ok: false, error: "연락처를 확인해 주세요." };
+  if (genderRaw !== "" && !sex) return { ok: false, error: "성별을 확인해 주세요." };
+  if (start !== "" && (!/^\d{4}-\d{2}-\d{2}$/.test(start) || Number.isNaN(Date.parse(start)))) {
+    return { ok: false, error: "연구참여시작일을 확인해 주세요." };
+  }
+  if (remark.length > 200) return { ok: false, error: "비고는 200자 이내로 적어 주세요." };
+  await sql`
+    UPDATE participants SET name = ${name}, record_or_birth = ${birth}, contact = ${contact}, gender = ${sex},
+      study_start_date = ${start === "" ? null : start}::date, remark = ${remark === "" ? null : remark}
+    WHERE id = ${id}
+  `;
+  return { ok: true };
+}
+
+// ── 기본정보 설문(W0) 응답 조회·수정 ────────────────────────────────────────────────────
+
+export type AdminW0 = {
+  sessionId: string;
+  completedAt: string | null;
+  answers: Record<string, { num: number | null; text: string | null }>;
+} | null;
+
+type W0Rule = { kind: "choice"; values: number[] } | { kind: "number"; min: number; max: number } | { kind: "multi"; values: number[] };
+
+function buildW0Rules(): Map<string, W0Rule> {
+  const m = new Map<string, W0Rule>();
+  for (const q of DEMOGRAPHICS) {
+    if (q.type === "radio") m.set(q.key, { kind: "choice", values: q.options.map((o) => o.value) });
+    else if (q.type === "multi") m.set(q.key, { kind: "multi", values: q.options.map((o) => o.value) });
+    else if (q.type === "number") m.set(q.key, { kind: "number", min: q.min ?? 0, max: q.max ?? 1000 });
+  }
+  m.set(ECOG_KEY, { kind: "choice", values: ECOG_OPTIONS.map((o) => o.value) });
+  for (const q of EMERGENCY_SCREENING) m.set(q.key, { kind: "choice", values: q.options.map((o) => o.value) });
+  for (const it of IPAQ_ITEMS) {
+    m.set(it.daysKey, { kind: "number", min: 0, max: 7 });
+    m.set(it.hoursKey, { kind: "number", min: 0, max: 24 });
+    m.set(it.minutesKey, { kind: "number", min: 0, max: 59 });
+  }
+  m.set(SITTING_KEYS.hours, { kind: "number", min: 0, max: 24 });
+  m.set(SITTING_KEYS.minutes, { kind: "number", min: 0, max: 59 });
+  return m;
+}
+const W0_RULES = buildW0Rules();
+
+export async function adminGetW0(patientCode: string): Promise<AdminW0> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  if (!code) return null;
+  const [s] = await sql`
+    SELECT id, completed_at FROM survey_sessions
+    WHERE patient_code = ${code} AND survey_type = 'w0' AND is_complete = TRUE
+    ORDER BY completed_at DESC LIMIT 1
+  `;
+  if (!s) return null;
+  const rows = await sql`SELECT question_key, answer_number, answer_text FROM w0_answers WHERE session_id = ${s.id}`;
+  const answers: Record<string, { num: number | null; text: string | null }> = {};
+  for (const r of rows) {
+    answers[String(r.question_key)] = {
+      num: r.answer_number === null || r.answer_number === undefined ? null : Number(r.answer_number),
+      text: r.answer_text === null || r.answer_text === undefined ? null : String(r.answer_text),
+    };
+  }
+  return { sessionId: String(s.id), completedAt: s.completed_at ? new Date(s.completed_at).toISOString() : null, answers };
+}
+
+/** Sets one 기본정보 answer. value is the number for choice/number questions, "2,3" style text for multi. */
+export async function adminSetW0Answer(
+  sessionId: string,
+  key: string,
+  value: number | string | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const rule = W0_RULES.get(String(key));
+  if (!isUuid(sessionId) || !rule) return { ok: false, error: "알 수 없는 문항입니다." };
+  const [s] = await sql`SELECT 1 FROM survey_sessions WHERE id = ${sessionId} AND survey_type = 'w0'`;
+  if (!s) return { ok: false, error: "세션을 찾을 수 없습니다." };
+
+  if (value === null || value === "") {
+    await sql`DELETE FROM w0_answers WHERE session_id = ${sessionId} AND question_key = ${key}`;
+    return { ok: true };
+  }
+  let num: number | null = null;
+  let text: string | null = null;
+  if (rule.kind === "multi") {
+    const parts = String(value).split(",").map((x) => Number(x.trim()));
+    if (parts.length === 0 || parts.some((p) => !rule.values.includes(p))) return { ok: false, error: "값을 확인해 주세요." };
+    text = [...new Set(parts)].sort((a, b) => a - b).join(",");
+  } else {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return { ok: false, error: "값을 확인해 주세요." };
+    if (rule.kind === "choice" && !rule.values.includes(n)) return { ok: false, error: "값을 확인해 주세요." };
+    if (rule.kind === "number" && (n < rule.min || n > rule.max)) return { ok: false, error: "범위를 확인해 주세요." };
+    num = n;
+  }
+  await sql`
+    INSERT INTO w0_answers (session_id, question_key, answer_number, answer_text)
+    VALUES (${sessionId}, ${key}, ${num}, ${text})
+    ON CONFLICT (session_id, question_key)
+    DO UPDATE SET answer_number = EXCLUDED.answer_number, answer_text = EXCLUDED.answer_text
+  `;
+  return { ok: true };
+}
+
+// ── 증상 설문(PRO-CTCAE)·삶의 질(QLQ-C30) 응답 수정 ────────────────────────────────────
+
+const PRO_QUESTION_MAP = new Map(
+  SURVEY_ITEMS.flatMap((item) => item.questions.map((q) => [`${item.id}-${q.key}`, { item, q }] as const))
+);
+
+/**
+ * Sets (or, with null, clears) one answer of a 증상 설문. Scale questions take 0–4, presence
+ * questions true/false. The session may be complete: this is the researcher correcting a record.
+ */
+export async function adminSetProAnswer(
+  sessionId: string,
+  itemId: number,
+  questionKey: string,
+  value: number | boolean | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const entry = PRO_QUESTION_MAP.get(`${itemId}-${questionKey}`);
+  if (!isUuid(sessionId) || !entry) return { ok: false, error: "알 수 없는 문항입니다." };
+  const [s] = await sql`SELECT 1 FROM survey_sessions WHERE id = ${sessionId} AND survey_type = 'pro_ctcae'`;
+  if (!s) return { ok: false, error: "세션을 찾을 수 없습니다." };
+
+  if (value === null) {
+    await sql`DELETE FROM survey_answers WHERE session_id = ${sessionId} AND item_id = ${itemId} AND question_key = ${questionKey}`;
+    return { ok: true };
+  }
+  const presence = entry.q.type === "presence";
+  const valid = presence ? typeof value === "boolean" : Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 4;
+  if (!valid) return { ok: false, error: "값을 확인해 주세요." };
+  await sql`
+    INSERT INTO survey_answers (session_id, item_id, question_key, item_term_en, question_type, answer_value, answer_boolean)
+    VALUES (${sessionId}, ${itemId}, ${questionKey}, ${entry.item.termEn}, ${entry.q.type},
+            ${presence ? null : (value as number)}, ${presence ? (value as boolean) : null})
+    ON CONFLICT (session_id, item_id, question_key)
+    DO UPDATE SET answer_value = EXCLUDED.answer_value, answer_boolean = EXCLUDED.answer_boolean
+  `;
+  return { ok: true };
+}
+
+export type QlqDashboard = {
+  sessions: { id: string; completed_at: string | null }[];
+  answers: { session_id: string; question_no: number; answer_value: number }[];
+};
+
+export async function adminGetQlq(patientCode: string): Promise<QlqDashboard> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  if (!code) return { sessions: [], answers: [] };
+  const sessions = await sql`
+    SELECT id, completed_at FROM survey_sessions
+    WHERE patient_code = ${code} AND survey_type = 'qlq_c30' AND is_complete = TRUE
+    ORDER BY completed_at ASC
+  `;
+  if (sessions.length === 0) return { sessions: [], answers: [] };
+  const answers = await sql`
+    SELECT session_id, question_no, answer_value FROM qlq_c30_answers
+    WHERE session_id = ANY(${sessions.map((x) => x.id)}::uuid[])
+  `;
+  return {
+    sessions: serialize(sessions) as QlqDashboard["sessions"],
+    answers: answers.map((a) => ({
+      session_id: String(a.session_id),
+      question_no: Number(a.question_no),
+      answer_value: Number(a.answer_value),
+    })),
+  };
+}
+
+export async function adminSetQlqAnswer(
+  sessionId: string,
+  questionNo: number,
+  value: number
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const q = QLQ_QUESTIONS.find((x) => x.no === questionNo);
+  if (!isUuid(sessionId) || !q) return { ok: false, error: "알 수 없는 문항입니다." };
+  const max = q.scale === "seven" ? 7 : 4;
+  if (!Number.isInteger(value) || value < 1 || value > max) return { ok: false, error: "값을 확인해 주세요." };
+  const [s] = await sql`SELECT 1 FROM survey_sessions WHERE id = ${sessionId} AND survey_type = 'qlq_c30'`;
+  if (!s) return { ok: false, error: "세션을 찾을 수 없습니다." };
+  await sql`
+    INSERT INTO qlq_c30_answers (session_id, question_no, answer_value)
+    VALUES (${sessionId}, ${questionNo}, ${value})
+    ON CONFLICT (session_id, question_no) DO UPDATE SET answer_value = EXCLUDED.answer_value
+  `;
+  return { ok: true };
+}
+
+/**
+ * Moves a completed survey to another date (YYYY-MM-DD, Korea time), keeping its time of day.
+ * Weeks in the dashboard are ordered and labelled by this date.
+ */
+export async function adminSetSessionDate(sessionId: string, date: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const d = String(date ?? "").trim();
+  if (!isUuid(sessionId) || !/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(d))) return { ok: false, error: "날짜를 확인해 주세요." };
+  const rows = await sql`
+    UPDATE survey_sessions
+    SET completed_at = (${d}::date + (completed_at AT TIME ZONE 'Asia/Seoul')::time) AT TIME ZONE 'Asia/Seoul'
+    WHERE id = ${sessionId} AND is_complete = TRUE AND completed_at IS NOT NULL
+    RETURNING id
+  `;
+  return rows.length === 0 ? { ok: false, error: "완료된 설문을 찾을 수 없습니다." } : { ok: true };
 }

@@ -3,13 +3,27 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { adminGetNextVisit, adminGetPatientDashboard, adminListPatients, type AdminPatient, type DashboardAnswer, type DashboardSession } from "@/lib/adminActions";
-import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, itemApplies, type Sex, type SurveyItem, type QuestionType } from "@/lib/questions";
+import {
+  adminGetNextVisit,
+  adminGetPatientDashboard,
+  adminListNotes,
+  adminListPatients,
+  adminSetProAnswer,
+  adminSetSessionDate,
+  type AdminPatient,
+  type DashboardAnswer,
+  type DashboardSession,
+  type ResearcherNote,
+} from "@/lib/adminActions";
+import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, itemApplies, type Sex, type SubQuestion, type SurveyItem, type QuestionType } from "@/lib/questions";
 import { computeItemGrade, GRADE_COLORS, GRADE_LABELS } from "@/lib/proctcaeGrading";
 import { patientLabel } from "@/lib/patientLabel";
-import ResearcherNotes from "./ResearcherNotes";
+import { NOTE_KINDS, isTimelineKind } from "@/lib/noteKinds";
+import ResearcherNotes, { sortNotes } from "./ResearcherNotes";
+import QlqEditor from "./QlqEditor";
+import PatientInfoEditor from "./PatientInfoEditor";
 
-type ViewMode = "composite" | "raw" | "notes";
+type ViewMode = "composite" | "raw" | "notes" | "qlq" | "info";
 
 const TYPE_LABEL: Record<QuestionType, string> = {
   frequency: "빈도",
@@ -43,6 +57,8 @@ function ViewToggle({ view, onChange, rawCount }: { view: ViewMode; onChange: (v
     ["composite", "Composite Grade"],
     ["raw", `전체 문항 (${rawCount})`],
     ["notes", "Researcher Notes"],
+    ["qlq", "삶의 질 (QLQ)"],
+    ["info", "기본정보·수정"],
   ];
   const index = options.findIndex(([mode]) => mode === view);
   return (
@@ -63,7 +79,7 @@ function ViewToggle({ view, onChange, rawCount }: { view: ViewMode; onChange: (v
           role="tab"
           aria-selected={view === mode}
           onClick={() => onChange(mode)}
-          className={`relative z-10 px-5 py-1.5 rounded-full text-center whitespace-nowrap transition-colors duration-200 ${
+          className={`relative z-10 px-4 py-1.5 rounded-full text-center whitespace-nowrap transition-colors duration-200 ${
             view === mode ? "text-gray-900" : "text-gray-500 hover:text-gray-700"
           }`}
         >
@@ -77,6 +93,91 @@ function ViewToggle({ view, onChange, rawCount }: { view: ViewMode; onChange: (v
 /** The first completed 증상 설문 is the baseline; later ones count weeks from it. */
 function weekName(index: number): string {
   return index === 0 ? "Baseline" : `${index}주차`;
+}
+
+/** YYYY-MM-DD in Korea time. */
+function kstYmd(iso: string | null): string {
+  if (!iso) return "";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+}
+
+/** The same instant's time of day, on another Korea-time date. */
+function withKstDate(iso: string, ymd: string): string {
+  const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(iso));
+  return new Date(`${ymd}T${time}+09:00`).toISOString();
+}
+
+/**
+ * Puts each contact / intervention note under the survey it came before: the first survey whose date
+ * is on or after the note date. Notes after the last survey go to `after` (they act on the next one).
+ */
+function bucketNotes(notes: ResearcherNote[], sessions: DashboardSession[]): { perSession: ResearcherNote[][]; after: ResearcherNote[] } {
+  const dates = sessions.map((s) => kstYmd(s.completed_at));
+  const perSession: ResearcherNote[][] = sessions.map(() => []);
+  const after: ResearcherNote[] = [];
+  for (const n of [...notes].reverse()) {
+    if (!isTimelineKind(n.kind)) continue;
+    const i = dates.findIndex((d) => n.note_date <= d);
+    if (i === -1) after.push(n);
+    else perSession[i].push(n);
+  }
+  return { perSession, after };
+}
+
+function TimelineCell({ items, onOpen }: { items: ResearcherNote[]; onOpen: () => void }) {
+  const groups = NOTE_KINDS.map((k) => ({ k, list: items.filter((n) => n.kind === k.key) })).filter((g) => g.list.length > 0);
+  return (
+    <div className="flex flex-col items-center gap-1">
+      {groups.map(({ k, list }) => (
+        <button
+          key={k.key}
+          type="button"
+          onClick={onOpen}
+          title={list.map((n) => `${n.note_date.slice(5).replace("-", "/")} ${k.label}${n.body ? `: ${n.body}` : ""}`).join("\n")}
+          className={`inline-flex items-center gap-0.5 whitespace-nowrap px-1.5 py-0.5 rounded-full border text-[11px] font-semibold hover:brightness-95 ${k.arrow} ${
+            k.key === "intervention" ? "ring-1 ring-rose-400" : ""
+          }`}
+        >
+          <span aria-hidden>↓</span>
+          {k.short}
+          {list.length > 1 && <span> {list.length}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A row under the week headers: arrows for the calls / interventions that came before each survey. */
+function TimelineRow({
+  lead,
+  perSession,
+  after,
+  onOpen,
+}: {
+  lead: number;
+  perSession: ResearcherNote[][];
+  after: ResearcherNote[];
+  onOpen: () => void;
+}) {
+  if (!perSession.some((b) => b.length > 0) && after.length === 0) return null;
+  return (
+    <tr className="bg-white border-t border-gray-200">
+      <td colSpan={lead} className="px-4 py-2 align-top sticky left-0 bg-white z-10 text-xs font-semibold text-gray-700">
+        직전 설문 이후 연락·중재
+        <span className="block font-normal text-gray-500">↓ 아래 주차 결과에 영향</span>
+      </td>
+      {perSession.map((items, i) => (
+        <td key={i} className="px-1 py-2 align-top">
+          <TimelineCell items={items} onOpen={onOpen} />
+        </td>
+      ))}
+      {after.length > 0 && (
+        <td className="px-1 py-2 align-top">
+          <TimelineCell items={after} onOpen={onOpen} />
+        </td>
+      )}
+    </tr>
+  );
 }
 
 function formatWeekLabel(iso: string | null) {
@@ -109,6 +210,11 @@ export default function PatientDashboardPage() {
   const [patients, setPatients] = useState<AdminPatient[]>([]);
   const [view, setView] = useState<ViewMode>("composite");
   const [nextVisit, setNextVisit] = useState<{ date: string; time: string; past: boolean } | null>(null);
+  const [notes, setNotes] = useState<ResearcherNote[]>([]);
+  const [notesLoading, setNotesLoading] = useState(true);
+  // 응답 수정 모드: 전체 문항 보기의 칸이 선택 상자로 바뀌고, 고르는 즉시 저장된다.
+  const [editMode, setEditMode] = useState(false);
+  const [editMsg, setEditMsg] = useState("");
 
   useEffect(() => {
     if (!code) return;
@@ -118,6 +224,23 @@ export default function PatientDashboardPage() {
         if (!cancelled) setNextVisit(v);
       })
       .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
+
+  useEffect(() => {
+    if (!code) return;
+    let cancelled = false;
+    setNotesLoading(true);
+    adminListNotes(code)
+      .then((data) => {
+        if (!cancelled) setNotes(sortNotes(data));
+      })
+      .catch((err) => console.error(err))
+      .finally(() => {
+        if (!cancelled) setNotesLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -205,6 +328,50 @@ export default function PatientDashboardPage() {
     return m;
   }, [answers]);
 
+  const timeline = useMemo(() => bucketNotes(notes, sessions), [notes, sessions]);
+
+  async function setProValue(sessionId: string, item: SurveyItem, q: SubQuestion, raw: string) {
+    setEditMsg("");
+    const value: number | boolean | null = raw === "" ? null : q.type === "presence" ? raw === "1" : Number(raw);
+    const res = await adminSetProAnswer(sessionId, item.id, q.key, value).catch(() => ({ ok: false as const, error: "저장에 실패했습니다." }));
+    if (!res.ok) {
+      setEditMsg(res.error);
+      return;
+    }
+    setEditMsg("저장했어요.");
+    setAnswers((prev) => {
+      const rest = prev.filter((a) => !(a.session_id === sessionId && a.item_id === item.id && a.question_key === q.key));
+      if (value === null) return rest;
+      return [
+        ...rest,
+        {
+          session_id: sessionId,
+          item_id: item.id,
+          question_key: q.key,
+          question_type: q.type,
+          answer_value: typeof value === "number" ? value : null,
+          answer_boolean: typeof value === "boolean" ? value : null,
+        },
+      ];
+    });
+  }
+
+  async function changeSessionDate(sessionId: string, ymd: string) {
+    if (!ymd) return;
+    setEditMsg("");
+    const res = await adminSetSessionDate(sessionId, ymd).catch(() => ({ ok: false as const, error: "저장에 실패했습니다." }));
+    if (!res.ok) {
+      setEditMsg(res.error);
+      return;
+    }
+    setEditMsg("날짜를 바꿨어요.");
+    setSessions((prev) =>
+      prev
+        .map((x) => (x.id === sessionId && x.completed_at ? { ...x, completed_at: withKstDate(x.completed_at, ymd) } : x))
+        .sort((a, b) => String(a.completed_at).localeCompare(String(b.completed_at)))
+    );
+  }
+
   const latestSession = sessions[sessions.length - 1];
   const alertRows = latestSession ? rows.filter((r) => r.gradesBySession[latestSession.id] === 3) : [];
   const visibleRows = rows.filter((r) => r.maxGrade >= 1);
@@ -286,14 +453,6 @@ export default function PatientDashboardPage() {
               className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-800"
             >
               진료용 PDF
-            </a>
-            <a
-              href={`/api/admin/report/${encodeURIComponent(code)}?print=1&lang=en`}
-              target="_blank"
-              rel="noopener"
-              className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-800"
-            >
-              PDF (English)
             </a>
             {nextVisit && (
               <span
@@ -385,13 +544,29 @@ export default function PatientDashboardPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
             <ViewToggle view={view} onChange={setView} rawCount={RAW_QUESTIONS.filter(({ item }) => itemApplies(item.id, sex)).length} />
-            {view !== "notes" && sessions.length > 0 && (
-              <button
-                onClick={exportCSV}
-                className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-              >
-                CSV 내보내기
-              </button>
+            {(view === "composite" || view === "raw") && sessions.length > 0 && (
+              <div className="flex items-center gap-2">
+                {view === "raw" && (
+                  <button
+                    onClick={() => {
+                      setEditMode((v) => !v);
+                      setEditMsg("");
+                    }}
+                    aria-pressed={editMode}
+                    className={`text-xs px-3 py-1.5 border rounded-lg font-medium ${
+                      editMode ? "bg-gray-900 border-gray-900 text-white" : "border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    {editMode ? "수정 모드 끄기" : "응답 수정 모드"}
+                  </button>
+                )}
+                <button
+                  onClick={exportCSV}
+                  className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+                >
+                  CSV 내보내기
+                </button>
+              </div>
             )}
           </div>
           {view === "composite" && sessions.length > 0 && (
@@ -399,9 +574,18 @@ export default function PatientDashboardPage() {
               <Legend />
             </div>
           )}
+          {view === "raw" && sessions.length > 0 && editMode && (
+            <div className="px-5 py-2.5 border-b border-gray-100 bg-amber-50 text-xs text-amber-900">
+              {editMsg || "수정 모드: 칸의 값을 고르면 바로 저장돼요. 주차 아래 날짜도 바꿀 수 있어요."}
+            </div>
+          )}
 
           {view === "notes" ? (
-            <ResearcherNotes code={code} />
+            <ResearcherNotes code={code} notes={notes} setNotes={setNotes} loading={notesLoading} />
+          ) : view === "qlq" ? (
+            <QlqEditor code={code} />
+          ) : view === "info" ? (
+            <PatientInfoEditor code={code} />
           ) : sessions.length === 0 ? (
             <div className="p-8 text-center text-gray-400 text-sm">완료된 PRO-CTCAE 설문이 없습니다.</div>
           ) : view === "composite" ? (
@@ -423,7 +607,15 @@ export default function PatientDashboardPage() {
                           <span className="font-normal text-gray-400">{formatWeekLabel(s.completed_at)}</span>
                         </th>
                       ))}
+                      {timeline.after.length > 0 && (
+                        <th className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap min-w-[72px]">
+                          다음 설문
+                          <br />
+                          <span className="font-normal text-gray-400">전</span>
+                        </th>
+                      )}
                     </tr>
+                    <TimelineRow lead={2} perSession={timeline.perSession} after={timeline.after} onOpen={() => setView("notes")} />
                   </thead>
                   <tbody>
                     {groupedRows.map(({ category, rows: groupRows }) =>
@@ -481,10 +673,28 @@ export default function PatientDashboardPage() {
                       <th key={s.id} className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap min-w-[64px]">
                         {weekName(idx)}
                         <br />
-                        <span className="font-normal text-gray-400">{formatWeekLabel(s.completed_at)}</span>
+                        {editMode ? (
+                          <input
+                            type="date"
+                            value={kstYmd(s.completed_at)}
+                            onChange={(e) => changeSessionDate(s.id, e.target.value)}
+                            aria-label="완료 날짜"
+                            className="mt-1 h-8 px-1 border border-gray-300 rounded-md text-xs font-normal text-gray-700 bg-white"
+                          />
+                        ) : (
+                          <span className="font-normal text-gray-400">{formatWeekLabel(s.completed_at)}</span>
+                        )}
                       </th>
                     ))}
+                    {timeline.after.length > 0 && (
+                      <th className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap min-w-[64px]">
+                        다음 설문
+                        <br />
+                        <span className="font-normal text-gray-400">전</span>
+                      </th>
+                    )}
                   </tr>
+                  <TimelineRow lead={1} perSession={timeline.perSession} after={timeline.after} onOpen={() => setView("notes")} />
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {SURVEY_ITEMS.map((item) =>
@@ -526,12 +736,36 @@ export default function PatientDashboardPage() {
                                 : RAW_COLORS[a.answer_value ?? 0];
                             return (
                               <td key={s.id} className="px-2 py-1.5 text-center">
-                                <span
-                                  title={rawTitle(a, q.type)}
-                                  className={`inline-flex min-w-9 h-8 px-1.5 items-center justify-center rounded-lg text-xs font-bold cursor-default ${color}`}
-                                >
-                                  {rawLabel(a, q.type)}
-                                </span>
+                                {editMode ? (
+                                  <select
+                                    value={isPresence ? (a?.answer_boolean === true ? "1" : a?.answer_boolean === false ? "0" : "") : String(a?.answer_value ?? "")}
+                                    onChange={(e) => setProValue(s.id, item, q, e.target.value)}
+                                    aria-label={`${item.termKo} ${TYPE_LABEL[q.type]}`}
+                                    title={rawTitle(a, q.type)}
+                                    className="h-8 min-w-[4.5rem] px-1 border border-gray-300 rounded-md text-xs font-bold text-gray-900 bg-white"
+                                  >
+                                    <option value="">—</option>
+                                    {isPresence ? (
+                                      <>
+                                        <option value="1">예</option>
+                                        <option value="0">아니오</option>
+                                      </>
+                                    ) : (
+                                      RESPONSE_OPTIONS[q.type].map((label, n) => (
+                                        <option key={n} value={n}>
+                                          {n} {label}
+                                        </option>
+                                      ))
+                                    )}
+                                  </select>
+                                ) : (
+                                  <span
+                                    title={rawTitle(a, q.type)}
+                                    className={`inline-flex min-w-9 h-8 px-1.5 items-center justify-center rounded-lg text-xs font-bold cursor-default ${color}`}
+                                  >
+                                    {rawLabel(a, q.type)}
+                                  </span>
+                                )}
                               </td>
                             );
                           })}
