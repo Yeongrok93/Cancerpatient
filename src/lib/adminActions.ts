@@ -7,9 +7,8 @@
 import { cookies } from "next/headers";
 import { sql, serialize, isUuid } from "./db";
 import { ADMIN_COOKIE_NAME, isAdminToken } from "./adminAuth";
-import { parseSex, SURVEY_ITEMS, type Sex } from "./questions";
+import { parseSex, type Sex } from "./questions";
 import { NOTE_KIND_BY_KEY, parseNoteKind, type NoteKind } from "./noteKinds";
-import { QLQ_QUESTIONS } from "./qlq-c30";
 import {
   DEMOGRAPHICS,
   ECOG_KEY,
@@ -427,44 +426,7 @@ export async function adminSetW0Answer(
   return { ok: true };
 }
 
-// ── 증상 설문(PRO-CTCAE)·삶의 질(QLQ-C30) 응답 수정 ────────────────────────────────────
-
-const PRO_QUESTION_MAP = new Map(
-  SURVEY_ITEMS.flatMap((item) => item.questions.map((q) => [`${item.id}-${q.key}`, { item, q }] as const))
-);
-
-/**
- * Sets (or, with null, clears) one answer of a 증상 설문. Scale questions take 0–4, presence
- * questions true/false. The session may be complete: this is the researcher correcting a record.
- */
-export async function adminSetProAnswer(
-  sessionId: string,
-  itemId: number,
-  questionKey: string,
-  value: number | boolean | null
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireAdmin();
-  const entry = PRO_QUESTION_MAP.get(`${itemId}-${questionKey}`);
-  if (!isUuid(sessionId) || !entry) return { ok: false, error: "알 수 없는 문항입니다." };
-  const [s] = await sql`SELECT 1 FROM survey_sessions WHERE id = ${sessionId} AND survey_type = 'pro_ctcae'`;
-  if (!s) return { ok: false, error: "세션을 찾을 수 없습니다." };
-
-  if (value === null) {
-    await sql`DELETE FROM survey_answers WHERE session_id = ${sessionId} AND item_id = ${itemId} AND question_key = ${questionKey}`;
-    return { ok: true };
-  }
-  const presence = entry.q.type === "presence";
-  const valid = presence ? typeof value === "boolean" : Number.isInteger(value) && (value as number) >= 0 && (value as number) <= 4;
-  if (!valid) return { ok: false, error: "값을 확인해 주세요." };
-  await sql`
-    INSERT INTO survey_answers (session_id, item_id, question_key, item_term_en, question_type, answer_value, answer_boolean)
-    VALUES (${sessionId}, ${itemId}, ${questionKey}, ${entry.item.termEn}, ${entry.q.type},
-            ${presence ? null : (value as number)}, ${presence ? (value as boolean) : null})
-    ON CONFLICT (session_id, item_id, question_key)
-    DO UPDATE SET answer_value = EXCLUDED.answer_value, answer_boolean = EXCLUDED.answer_boolean
-  `;
-  return { ok: true };
-}
+// ── 삶의 질(QLQ-C30) 응답 조회 ────────────────────────────────────────────
 
 export type QlqDashboard = {
   sessions: { id: string; completed_at: string | null }[];
@@ -493,43 +455,6 @@ export async function adminGetQlq(patientCode: string): Promise<QlqDashboard> {
       answer_value: Number(a.answer_value),
     })),
   };
-}
-
-export async function adminSetQlqAnswer(
-  sessionId: string,
-  questionNo: number,
-  value: number
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireAdmin();
-  const q = QLQ_QUESTIONS.find((x) => x.no === questionNo);
-  if (!isUuid(sessionId) || !q) return { ok: false, error: "알 수 없는 문항입니다." };
-  const max = q.scale === "seven" ? 7 : 4;
-  if (!Number.isInteger(value) || value < 1 || value > max) return { ok: false, error: "값을 확인해 주세요." };
-  const [s] = await sql`SELECT 1 FROM survey_sessions WHERE id = ${sessionId} AND survey_type = 'qlq_c30'`;
-  if (!s) return { ok: false, error: "세션을 찾을 수 없습니다." };
-  await sql`
-    INSERT INTO qlq_c30_answers (session_id, question_no, answer_value)
-    VALUES (${sessionId}, ${questionNo}, ${value})
-    ON CONFLICT (session_id, question_no) DO UPDATE SET answer_value = EXCLUDED.answer_value
-  `;
-  return { ok: true };
-}
-
-/**
- * Moves a completed survey to another date (YYYY-MM-DD, Korea time), keeping its time of day.
- * Weeks in the dashboard are ordered and labelled by this date.
- */
-export async function adminSetSessionDate(sessionId: string, date: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireAdmin();
-  const d = String(date ?? "").trim();
-  if (!isUuid(sessionId) || !/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(d))) return { ok: false, error: "날짜를 확인해 주세요." };
-  const rows = await sql`
-    UPDATE survey_sessions
-    SET completed_at = (${d}::date + (completed_at AT TIME ZONE 'Asia/Seoul')::time) AT TIME ZONE 'Asia/Seoul'
-    WHERE id = ${sessionId} AND is_complete = TRUE AND completed_at IS NOT NULL
-    RETURNING id
-  `;
-  return rows.length === 0 ? { ok: false, error: "완료된 설문을 찾을 수 없습니다." } : { ok: true };
 }
 
 // ── 임상정보 (연구자 입력) ──────────────────────────────────────────────────────────────

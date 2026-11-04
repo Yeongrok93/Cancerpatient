@@ -8,14 +8,12 @@ import {
   adminGetPatientDashboard,
   adminListNotes,
   adminListPatients,
-  adminSetProAnswer,
-  adminSetSessionDate,
   type AdminPatient,
   type DashboardAnswer,
   type DashboardSession,
   type ResearcherNote,
 } from "@/lib/adminActions";
-import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, itemApplies, type Sex, type SubQuestion, type SurveyItem, type QuestionType } from "@/lib/questions";
+import { SURVEY_ITEMS, CATEGORIES, RESPONSE_OPTIONS, itemApplies, type Sex, type SurveyItem, type QuestionType } from "@/lib/questions";
 import { computeItemGrade, GRADE_COLORS, GRADE_LABELS } from "@/lib/proctcaeGrading";
 import { patientLabel } from "@/lib/patientLabel";
 import { NOTE_KINDS, isTimelineKind } from "@/lib/noteKinds";
@@ -101,12 +99,6 @@ function kstYmd(iso: string | null): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
 }
 
-/** The same instant's time of day, on another Korea-time date. */
-function withKstDate(iso: string, ymd: string): string {
-  const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(iso));
-  return new Date(`${ymd}T${time}+09:00`).toISOString();
-}
-
 /**
  * Puts each contact / intervention note under the survey it came before: the first survey whose date
  * is on or after the note date. Notes after the last survey go to `after` (they act on the next one).
@@ -134,9 +126,7 @@ function TimelineCell({ items, onOpen }: { items: ResearcherNote[]; onOpen: () =
           type="button"
           onClick={onOpen}
           title={list.map((n) => `${n.note_date.slice(5).replace("-", "/")} ${k.label}${n.body ? `: ${n.body}` : ""}`).join("\n")}
-          className={`inline-flex items-center gap-0.5 whitespace-nowrap px-1.5 py-0.5 rounded-full border text-[11px] font-semibold hover:brightness-95 ${k.arrow} ${
-            k.key === "intervention" ? "ring-1 ring-rose-400" : ""
-          }`}
+          className={`inline-flex items-center gap-0.5 whitespace-nowrap px-1.5 py-0.5 rounded-full border text-[11px] font-semibold hover:brightness-95 ${k.arrow}`}
         >
           <span aria-hidden>↓</span>
           {k.short}
@@ -212,9 +202,6 @@ export default function PatientDashboardPage() {
   const [nextVisit, setNextVisit] = useState<{ date: string; time: string; past: boolean } | null>(null);
   const [notes, setNotes] = useState<ResearcherNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(true);
-  // 응답 수정 모드: 전체 문항 보기의 칸이 선택 상자로 바뀌고, 고르는 즉시 저장된다.
-  const [editMode, setEditMode] = useState(false);
-  const [editMsg, setEditMsg] = useState("");
 
   useEffect(() => {
     if (!code) return;
@@ -329,48 +316,6 @@ export default function PatientDashboardPage() {
   }, [answers]);
 
   const timeline = useMemo(() => bucketNotes(notes, sessions), [notes, sessions]);
-
-  async function setProValue(sessionId: string, item: SurveyItem, q: SubQuestion, raw: string) {
-    setEditMsg("");
-    const value: number | boolean | null = raw === "" ? null : q.type === "presence" ? raw === "1" : Number(raw);
-    const res = await adminSetProAnswer(sessionId, item.id, q.key, value).catch(() => ({ ok: false as const, error: "저장에 실패했습니다." }));
-    if (!res.ok) {
-      setEditMsg(res.error);
-      return;
-    }
-    setEditMsg("저장했어요.");
-    setAnswers((prev) => {
-      const rest = prev.filter((a) => !(a.session_id === sessionId && a.item_id === item.id && a.question_key === q.key));
-      if (value === null) return rest;
-      return [
-        ...rest,
-        {
-          session_id: sessionId,
-          item_id: item.id,
-          question_key: q.key,
-          question_type: q.type,
-          answer_value: typeof value === "number" ? value : null,
-          answer_boolean: typeof value === "boolean" ? value : null,
-        },
-      ];
-    });
-  }
-
-  async function changeSessionDate(sessionId: string, ymd: string) {
-    if (!ymd) return;
-    setEditMsg("");
-    const res = await adminSetSessionDate(sessionId, ymd).catch(() => ({ ok: false as const, error: "저장에 실패했습니다." }));
-    if (!res.ok) {
-      setEditMsg(res.error);
-      return;
-    }
-    setEditMsg("날짜를 바꿨어요.");
-    setSessions((prev) =>
-      prev
-        .map((x) => (x.id === sessionId && x.completed_at ? { ...x, completed_at: withKstDate(x.completed_at, ymd) } : x))
-        .sort((a, b) => String(a.completed_at).localeCompare(String(b.completed_at)))
-    );
-  }
 
   const latestSession = sessions[sessions.length - 1];
   const alertRows = latestSession ? rows.filter((r) => r.gradesBySession[latestSession.id] === 3) : [];
@@ -546,20 +491,6 @@ export default function PatientDashboardPage() {
             <ViewToggle view={view} onChange={setView} rawCount={RAW_QUESTIONS.filter(({ item }) => itemApplies(item.id, sex)).length} />
             {(view === "composite" || view === "raw") && sessions.length > 0 && (
               <div className="flex items-center gap-2">
-                {view === "raw" && (
-                  <button
-                    onClick={() => {
-                      setEditMode((v) => !v);
-                      setEditMsg("");
-                    }}
-                    aria-pressed={editMode}
-                    className={`text-xs px-3 py-1.5 border rounded-lg font-medium ${
-                      editMode ? "bg-gray-900 border-gray-900 text-white" : "border-gray-300 hover:bg-gray-50"
-                    }`}
-                  >
-                    {editMode ? "수정 모드 끄기" : "응답 수정 모드"}
-                  </button>
-                )}
                 <button
                   onClick={exportCSV}
                   className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
@@ -572,11 +503,6 @@ export default function PatientDashboardPage() {
           {view === "composite" && sessions.length > 0 && (
             <div className="px-5 py-2.5 border-b border-gray-100">
               <Legend />
-            </div>
-          )}
-          {view === "raw" && sessions.length > 0 && editMode && (
-            <div className="px-5 py-2.5 border-b border-gray-100 bg-amber-50 text-xs text-amber-900">
-              {editMsg || "수정 모드: 칸의 값을 고르면 바로 저장돼요. 주차 아래 날짜도 바꿀 수 있어요."}
             </div>
           )}
 
@@ -673,17 +599,7 @@ export default function PatientDashboardPage() {
                       <th key={s.id} className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap min-w-[64px]">
                         {weekName(idx)}
                         <br />
-                        {editMode ? (
-                          <input
-                            type="date"
-                            value={kstYmd(s.completed_at)}
-                            onChange={(e) => changeSessionDate(s.id, e.target.value)}
-                            aria-label="완료 날짜"
-                            className="mt-1 h-8 px-1 border border-gray-300 rounded-md text-xs font-normal text-gray-700 bg-white"
-                          />
-                        ) : (
-                          <span className="font-normal text-gray-400">{formatWeekLabel(s.completed_at)}</span>
-                        )}
+                        <span className="font-normal text-gray-400">{formatWeekLabel(s.completed_at)}</span>
                       </th>
                     ))}
                     {timeline.after.length > 0 && (
@@ -736,36 +652,12 @@ export default function PatientDashboardPage() {
                                 : RAW_COLORS[a.answer_value ?? 0];
                             return (
                               <td key={s.id} className="px-2 py-1.5 text-center">
-                                {editMode ? (
-                                  <select
-                                    value={isPresence ? (a?.answer_boolean === true ? "1" : a?.answer_boolean === false ? "0" : "") : String(a?.answer_value ?? "")}
-                                    onChange={(e) => setProValue(s.id, item, q, e.target.value)}
-                                    aria-label={`${item.termKo} ${TYPE_LABEL[q.type]}`}
-                                    title={rawTitle(a, q.type)}
-                                    className="h-8 min-w-[4.5rem] px-1 border border-gray-300 rounded-md text-xs font-bold text-gray-900 bg-white"
-                                  >
-                                    <option value="">—</option>
-                                    {isPresence ? (
-                                      <>
-                                        <option value="1">예</option>
-                                        <option value="0">아니오</option>
-                                      </>
-                                    ) : (
-                                      RESPONSE_OPTIONS[q.type].map((label, n) => (
-                                        <option key={n} value={n}>
-                                          {n} {label}
-                                        </option>
-                                      ))
-                                    )}
-                                  </select>
-                                ) : (
-                                  <span
-                                    title={rawTitle(a, q.type)}
-                                    className={`inline-flex min-w-9 h-8 px-1.5 items-center justify-center rounded-lg text-xs font-bold cursor-default ${color}`}
-                                  >
-                                    {rawLabel(a, q.type)}
-                                  </span>
-                                )}
+                                <span
+                                  title={rawTitle(a, q.type)}
+                                  className={`inline-flex min-w-9 h-8 px-1.5 items-center justify-center rounded-lg text-xs font-bold cursor-default ${color}`}
+                                >
+                                  {rawLabel(a, q.type)}
+                                </span>
                               </td>
                             );
                           })}

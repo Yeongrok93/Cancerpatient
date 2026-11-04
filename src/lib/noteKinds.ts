@@ -3,7 +3,7 @@
 // Anything but a plain 메모 is drawn as an arrow above the matching survey week in the patient
 // dashboard, so the effect of an intervention is easy to read next to the symptom grades.
 
-export type NoteKind = "call" | "sms" | "visit" | "intervention" | "note";
+export type NoteKind = "call" | "sms" | "note";
 
 export type NoteKindInfo = {
   key: NoteKind;
@@ -25,16 +25,6 @@ export const NOTE_KINDS: NoteKindInfo[] = [
     key: "sms", label: "문자", short: "문자", contact: true,
     hint: "문자 내용 (선택)",
     chip: "bg-emerald-50 text-emerald-900 border-emerald-200", arrow: "bg-emerald-100 text-emerald-900 border-emerald-300",
-  },
-  {
-    key: "visit", label: "방문·외래", short: "외래", contact: false,
-    hint: "방문·외래 내용 — 예: 항암 투약일, 교수님 진료",
-    chip: "bg-violet-50 text-violet-900 border-violet-200", arrow: "bg-violet-100 text-violet-900 border-violet-300",
-  },
-  {
-    key: "intervention", label: "중재", short: "중재", contact: false,
-    hint: "어떤 중재가 어떻게 들어갔는지 — 예: 구내염 구강간호 교육, 약 조정 요청",
-    chip: "bg-rose-50 text-rose-900 border-rose-200", arrow: "bg-rose-100 text-rose-900 border-rose-400",
   },
   {
     key: "note", label: "메모", short: "메모", contact: false,

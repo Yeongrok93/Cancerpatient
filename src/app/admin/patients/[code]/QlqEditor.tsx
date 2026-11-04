@@ -3,20 +3,15 @@
 // 삶의 질(QLQ-C30): Composite Grade / 전체 문항 보기와 같은 구성.
 //  - 영역 점수: 척도별 0–100점을 색 칩으로 (기능·건강상태는 낮을수록, 증상은 높을수록 나쁨)
 //  - 전체 문항: 1~30번 응답 값을 색 칩으로
-// 응답 수정 모드를 켜면 전체 문항의 칸이 선택 상자로 바뀌고, 고르는 즉시 저장돼요.
+// 조회 전용.
 
 import { useEffect, useMemo, useState } from "react";
-import { adminGetQlq, adminSetQlqAnswer, adminSetSessionDate, type QlqDashboard } from "@/lib/adminActions";
+import { adminGetQlq, type QlqDashboard } from "@/lib/adminActions";
 import { FOUR_POINT_LABELS, QLQ_QUESTIONS } from "@/lib/qlq-c30";
 import { QLQ_SCALES, qlqBadness, qlqScaleScore } from "@/lib/qlqScoring";
 import { GRADE_COLORS } from "@/lib/proctcaeGrading";
 
 type SubView = "scores" | "items";
-
-function ymdKst(iso: string | null): string {
-  if (!iso) return "";
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
-}
 
 function shortDate(iso: string | null): string {
   if (!iso) return "—";
@@ -38,9 +33,7 @@ function itemBadness(no: number, v: number): 0 | 1 | 2 | 3 {
 export default function QlqEditor({ code }: { code: string }) {
   const [data, setData] = useState<QlqDashboard>({ sessions: [], answers: [] });
   const [loading, setLoading] = useState(true);
-  const [msg, setMsg] = useState("");
   const [sub, setSub] = useState<SubView>("scores");
-  const [editMode, setEditMode] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +44,6 @@ export default function QlqEditor({ code }: { code: string }) {
       })
       .catch((err) => {
         console.error(err);
-        if (!cancelled) setMsg("불러오지 못했습니다.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -76,46 +68,6 @@ export default function QlqEditor({ code }: { code: string }) {
     return m;
   }, [data.answers]);
 
-  async function setValue(sessionId: string, no: number, raw: string) {
-    if (raw === "") return;
-    const value = Number(raw);
-    setMsg("");
-    const res = await adminSetQlqAnswer(sessionId, no, value).catch(() => ({ ok: false as const, error: "저장에 실패했습니다." }));
-    if (!res.ok) {
-      setMsg(res.error);
-      return;
-    }
-    setMsg("저장했어요.");
-    setData((prev) => ({
-      ...prev,
-      answers: [
-        ...prev.answers.filter((a) => !(a.session_id === sessionId && a.question_no === no)),
-        { session_id: sessionId, question_no: no, answer_value: value },
-      ],
-    }));
-  }
-
-  async function setDate(sessionId: string, date: string) {
-    if (!date) return;
-    setMsg("");
-    const res = await adminSetSessionDate(sessionId, date).catch(() => ({ ok: false as const, error: "저장에 실패했습니다." }));
-    if (!res.ok) {
-      setMsg(res.error);
-      return;
-    }
-    setMsg("날짜를 바꿨어요.");
-    setData((prev) => ({
-      ...prev,
-      sessions: prev.sessions
-        .map((s) => {
-          if (s.id !== sessionId || !s.completed_at) return s;
-          const time = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Seoul", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }).format(new Date(s.completed_at));
-          return { ...s, completed_at: new Date(`${date}T${time}+09:00`).toISOString() };
-        })
-        .sort((a, b) => String(a.completed_at).localeCompare(String(b.completed_at))),
-    }));
-  }
-
   if (loading) return <div className="p-8 text-center text-gray-400 text-sm">불러오는 중...</div>;
   if (data.sessions.length === 0) return <div className="p-8 text-center text-gray-400 text-sm">완료된 QLQ-C30 설문이 없습니다.</div>;
 
@@ -123,17 +75,7 @@ export default function QlqEditor({ code }: { code: string }) {
     <th key={s.id} className="px-2 py-2.5 text-center text-xs font-medium text-gray-500 whitespace-nowrap min-w-[72px]">
       {weekName(i)}
       <br />
-      {editMode && sub === "items" ? (
-        <input
-          type="date"
-          value={ymdKst(s.completed_at)}
-          onChange={(e) => setDate(s.id, e.target.value)}
-          aria-label="완료 날짜"
-          className="mt-1 h-8 px-1 border border-gray-300 rounded-md text-xs font-normal text-gray-700 bg-white"
-        />
-      ) : (
-        <span className="font-normal text-gray-400">{shortDate(s.completed_at)}</span>
-      )}
+      <span className="font-normal text-gray-400">{shortDate(s.completed_at)}</span>
     </th>
   );
 
@@ -156,26 +98,12 @@ export default function QlqEditor({ code }: { code: string }) {
             </button>
           ))}
         </div>
-        {sub === "items" && (
-          <button
-            onClick={() => {
-              setEditMode((v) => !v);
-              setMsg("");
-            }}
-            aria-pressed={editMode}
-            className={`text-xs px-3 py-1.5 border rounded-lg font-medium ${editMode ? "bg-gray-900 border-gray-900 text-white" : "border-gray-300 hover:bg-gray-50"}`}
-          >
-            {editMode ? "수정 모드 끄기" : "응답 수정 모드"}
-          </button>
-        )}
       </div>
 
-      <div className={`px-5 py-2.5 border-b border-gray-100 text-xs ${editMode && sub === "items" ? "bg-amber-50 text-amber-900" : "text-gray-500"}`}>
-        {sub === "items" && editMode
-          ? msg || "수정 모드: 칸의 값을 고르면 바로 저장돼요. 주차 아래 날짜도 바꿀 수 있어요."
-          : sub === "scores"
-            ? "0~100점. 기능척도·전반적 건강상태는 높을수록 좋고, 증상척도는 높을수록 증상이 심해요. 색은 나쁜 정도예요."
-            : "1~28번은 1(전혀 아니다)~4(매우), 29·30번은 1(매우 나쁨)~7(아주 좋음). 색은 나쁜 정도예요."}
+      <div className="px-5 py-2.5 border-b border-gray-100 text-xs text-gray-500">
+        {sub === "items"
+          ? "1~28번은 1(전혀 아니다)~4(매우), 29·30번은 1(매우 나쁨)~7(아주 좋음)이에요. 색은 나쁜 정도예요."
+          : "0~100점. 기능척도·전반적 건강상태는 높을수록 좋고, 증상척도는 높을수록 증상이 심해요. 색은 나쁜 정도예요."}
       </div>
 
       <div className="overflow-x-auto">
@@ -244,31 +172,14 @@ export default function QlqEditor({ code }: { code: string }) {
                       const label = v === undefined ? "응답 없음" : q.scale === "seven" ? `${v} / 7` : `${v} - ${FOUR_POINT_LABELS[v - 1]}`;
                       return (
                         <td key={s.id} className="px-2 py-1.5 text-center">
-                          {editMode ? (
-                            <select
-                              value={v ?? ""}
-                              onChange={(e) => setValue(s.id, q.no, e.target.value)}
-                              aria-label={`${q.no}번 응답`}
-                              title={label}
-                              className="h-8 w-16 px-1 border border-gray-300 rounded-md text-sm font-bold text-gray-900 bg-white"
-                            >
-                              {v === undefined && <option value="">—</option>}
-                              {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
-                                <option key={n} value={n}>
-                                  {n}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <span
-                              title={label}
-                              className={`inline-flex min-w-9 h-8 px-1.5 items-center justify-center rounded-lg text-xs font-bold cursor-default ${
-                                v === undefined ? "bg-gray-50 text-gray-300" : GRADE_COLORS[itemBadness(q.no, v)]
-                              }`}
-                            >
-                              {v ?? "—"}
-                            </span>
-                          )}
+                          <span
+                            title={label}
+                            className={`inline-flex min-w-9 h-8 px-1.5 items-center justify-center rounded-lg text-xs font-bold cursor-default ${
+                              v === undefined ? "bg-gray-50 text-gray-300" : GRADE_COLORS[itemBadness(q.no, v)]
+                            }`}
+                          >
+                            {v ?? "—"}
+                          </span>
                         </td>
                       );
                     })}
