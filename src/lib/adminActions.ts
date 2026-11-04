@@ -8,6 +8,7 @@ import { cookies } from "next/headers";
 import { sql, serialize, isUuid } from "./db";
 import { ADMIN_COOKIE_NAME, isAdminToken } from "./adminAuth";
 import { parseSex, type Sex } from "./questions";
+import { ADC_DRUGS } from "./adcDrugs";
 import { NOTE_KIND_BY_KEY, parseNoteKind, type NoteKind } from "./noteKinds";
 import {
   DEMOGRAPHICS,
@@ -499,10 +500,12 @@ export async function adminSaveClinicalInfo(
     const t = String(v ?? "").trim();
     return t.length > max ? null : t === "" ? "" : t;
   };
-  const adc = text(info?.adc_drug, 200);
+  const adcRaw = String(info?.adc_drug ?? "").trim();
+  if (adcRaw !== "" && !ADC_DRUGS.some((d) => d.value === adcRaw)) return { ok: false, error: "ADC 약제를 확인해 주세요." };
+  const adc = adcRaw;
   const cancer = text(info?.cancer_type, 200);
   const names = text(info?.comorbidity_names, 2000);
-  if (adc === null || cancer === null || names === null) return { ok: false, error: "입력이 너무 깁니다." };
+  if (cancer === null || names === null) return { ok: false, error: "입력이 너무 깁니다." };
 
   const stage = String(info?.cancer_stage ?? "").trim();
   if (stage !== "" && !["I", "II", "III", "IV"].includes(stage)) return { ok: false, error: "병기를 확인해 주세요." };

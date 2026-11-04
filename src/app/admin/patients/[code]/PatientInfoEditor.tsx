@@ -15,6 +15,7 @@ import {
   type AdminW0,
   type ParticipantInfo,
 } from "@/lib/adminActions";
+import { ADC_DRUGS } from "@/lib/adcDrugs";
 import {
   DEMOGRAPHICS,
   ECOG_KEY,
@@ -226,7 +227,14 @@ export default function PatientInfoEditor({ code }: { code: string }) {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-3xl">
           <Field label="투약 ADC 약제명">
-            <input className={`${inputCls} w-full`} value={clinical.adc_drug} onChange={(e) => setClinical({ ...clinical, adc_drug: e.target.value })} placeholder="약제명 기재" />
+            <select className={`${inputCls} w-full`} value={clinical.adc_drug} onChange={(e) => setClinical({ ...clinical, adc_drug: e.target.value })}>
+              <option value="">(선택)</option>
+              {ADC_DRUGS.map((d) => (
+                <option key={d.value} value={d.value}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="암 진단명">
             <input className={`${inputCls} w-full`} value={clinical.cancer_type} onChange={(e) => setClinical({ ...clinical, cancer_type: e.target.value })} placeholder="병명 기재" />
