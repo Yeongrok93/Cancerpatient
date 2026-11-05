@@ -188,3 +188,6 @@ CREATE TABLE IF NOT EXISTS clinical_info (
   comorbidity_names TEXT,
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- 다음 외래 "아직 일정이 안 잡혔어요" saved while the 증상 설문 is still in progress, so a reload keeps the choice.
+ALTER TABLE survey_sessions ADD COLUMN IF NOT EXISTS next_visit_unknown BOOLEAN NOT NULL DEFAULT FALSE;

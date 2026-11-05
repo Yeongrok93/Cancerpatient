@@ -347,6 +347,46 @@ async function nextVisitDue(code: string | null): Promise<boolean> {
   return !upcoming;
 }
 
+async function sessionVisitUnknown(sessionId: string): Promise<boolean> {
+  const [r] = await sql`SELECT next_visit_unknown FROM survey_sessions WHERE id = ${sessionId}`;
+  return !!r?.next_visit_unknown;
+}
+
+async function upsertVisit(code: string, sessionId: string, visit: { date: string; time: string }) {
+  await sql`
+    INSERT INTO clinic_visits (patient_code, session_id, visit_date, visit_time)
+    VALUES (${code}, ${sessionId}, ${visit.date}::date, ${visit.time}::time)
+    ON CONFLICT (session_id) DO UPDATE SET visit_date = EXCLUDED.visit_date, visit_time = EXCLUDED.visit_time
+  `;
+}
+
+/**
+ * Saves the 다음 외래 answer while the 증상 설문 is still being filled in (not only at submit), so a
+ * reload or a closed page keeps it. null clears an earlier "아직 일정이 안 잡혔어요".
+ */
+export async function saveNextVisit(
+  sessionId: string,
+  nextVisit: NextVisitInput | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const open = await getOpenSession(sessionId, "pro_ctcae");
+  if (open.error) return { ok: false, error: open.error };
+  const code = await getSessionPatientCode(sessionId);
+  if (!code) return { ok: false, error: "not_found" };
+  if (nextVisit === null) {
+    await sql`UPDATE survey_sessions SET next_visit_unknown = FALSE WHERE id = ${sessionId}`;
+    return { ok: true };
+  }
+  const visit = parseNextVisit(nextVisit);
+  if (!visit) return { ok: false, error: "invalid" };
+  if (visit === "unknown") {
+    await sql`UPDATE survey_sessions SET next_visit_unknown = TRUE WHERE id = ${sessionId}`;
+  } else {
+    await upsertVisit(code, sessionId, visit);
+    await sql`UPDATE survey_sessions SET next_visit_unknown = FALSE WHERE id = ${sessionId}`;
+  }
+  return { ok: true };
+}
+
 /** A valid future visit, "unknown", or null when the input is unusable. */
 function parseNextVisit(v: unknown): { date: string; time: string } | "unknown" | null {
   if (!v || typeof v !== "object") return null;
@@ -384,7 +424,7 @@ export async function loadProCtcaeSession(
   return {
     status: "ok",
     sex: await sexForSession(sessionId),
-    askNextVisit: await nextVisitDue(code),
+    askNextVisit: (await nextVisitDue(code)) && !(await sessionVisitUnknown(sessionId)),
     rewardSoFar: await rewardSoFar(code),
     answers: rows.map((r) => ({
       item_id: r.item_id,
@@ -470,14 +510,10 @@ export async function submitProCtcae(
   const code = await getSessionPatientCode(sessionId);
   if (await nextVisitDue(code)) {
     const visit = parseNextVisit(nextVisit);
-    if (!visit) return { ok: false, error: "next_visit_required" };
-    if (visit !== "unknown") {
-      await sql`
-        INSERT INTO clinic_visits (patient_code, session_id, visit_date, visit_time)
-        VALUES (${code}, ${sessionId}, ${visit.date}::date, ${visit.time}::time)
-        ON CONFLICT (session_id) DO UPDATE SET visit_date = EXCLUDED.visit_date, visit_time = EXCLUDED.visit_time
-      `;
-    }
+    // "아직 일정이 안 잡혔어요" may already have been saved earlier in this session.
+    const unknownSaved = !visit && (await sessionVisitUnknown(sessionId));
+    if (!visit && !unknownSaved) return { ok: false, error: "next_visit_required" };
+    if (visit && visit !== "unknown") await upsertVisit(code!, sessionId, visit);
   }
   const comment = String(additionalComment ?? "").trim().slice(0, 5000) || null;
   await sql`
@@ -516,7 +552,88 @@ export async function submitQlqC30(
   return { ok: true };
 }
 
+// ── QLQ-C30 임시 저장 (제출 전에 닫아도 이어서 작성) ─────────────────────────
+
+export async function loadQlqC30Draft(
+  sessionId: string
+): Promise<{ status: "ok"; answers: Record<number, number> } | { status: "complete" | "not_found" }> {
+  const open = await getOpenSession(sessionId, "qlq_c30");
+  if (open.error) return { status: open.error };
+  const rows = await sql`SELECT question_no, answer_value FROM qlq_c30_answers WHERE session_id = ${sessionId}`;
+  const answers: Record<number, number> = {};
+  for (const r of rows) answers[Number(r.question_no)] = Number(r.answer_value);
+  return { status: "ok", answers };
+}
+
+export async function saveQlqC30Draft(
+  sessionId: string,
+  answers: { question_no: number; answer_value: number }[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const open = await getOpenSession(sessionId, "qlq_c30");
+  if (open.error) return { ok: false, error: open.error };
+  if (!Array.isArray(answers) || answers.length > QLQ_QUESTIONS.length) return { ok: false, error: "invalid rows" };
+  if (answers.length === 0) return { ok: true };
+  const nos: number[] = [], vals: number[] = [];
+  for (const a of answers) {
+    const q = QLQ_QUESTIONS.find((x) => x.no === a?.question_no);
+    const max = q?.scale === "seven" ? 7 : 4;
+    if (!q || !Number.isInteger(a.answer_value) || a.answer_value < 1 || a.answer_value > max) {
+      return { ok: false, error: "invalid value" };
+    }
+    nos.push(q.no);
+    vals.push(a.answer_value);
+  }
+  await sql`
+    INSERT INTO qlq_c30_answers (session_id, question_no, answer_value)
+    SELECT ${sessionId}::uuid, * FROM UNNEST(${nos}::int[], ${vals}::int[])
+    ON CONFLICT (session_id, question_no) DO UPDATE SET answer_value = EXCLUDED.answer_value
+  `;
+  return { ok: true };
+}
+
 // ── W0 ───────────────────────────────────────────────────────────
+
+/** Saved so far, keyed by question; numbers come back as numbers, multi-choice as "2,3" text. */
+export async function loadW0Draft(
+  sessionId: string
+): Promise<{ status: "ok"; answers: Record<string, number | string> } | { status: "complete" | "not_found" }> {
+  const open = await getOpenSession(sessionId, "w0");
+  if (open.error) return { status: open.error };
+  const rows = await sql`SELECT question_key, answer_number, answer_text FROM w0_answers WHERE session_id = ${sessionId}`;
+  const answers: Record<string, number | string> = {};
+  for (const r of rows) {
+    if (r.answer_number !== null && r.answer_number !== undefined) answers[String(r.question_key)] = Number(r.answer_number);
+    else if (r.answer_text !== null && r.answer_text !== undefined) answers[String(r.question_key)] = String(r.answer_text);
+  }
+  return { status: "ok", answers };
+}
+
+export async function saveW0Draft(
+  sessionId: string,
+  answers: { question_key: string; answer_number: number | null; answer_text: string | null }[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const open = await getOpenSession(sessionId, "w0");
+  if (open.error) return { ok: false, error: open.error };
+  if (!Array.isArray(answers) || answers.length > 200) return { ok: false, error: "invalid rows" };
+  if (answers.length === 0) return { ok: true };
+  const keys: string[] = [], nums: (number | null)[] = [], texts: (string | null)[] = [];
+  for (const a of answers) {
+    const key = String(a?.question_key ?? "");
+    if (!/^[A-Za-z0-9_]{1,64}$/.test(key)) return { ok: false, error: "invalid key" };
+    const num = a.answer_number === null || a.answer_number === undefined ? null : Number(a.answer_number);
+    if (num !== null && !Number.isFinite(num)) return { ok: false, error: "invalid value" };
+    keys.push(key);
+    nums.push(num);
+    texts.push(a.answer_text === null || a.answer_text === undefined ? null : String(a.answer_text).slice(0, 1000));
+  }
+  await sql`
+    INSERT INTO w0_answers (session_id, question_key, answer_number, answer_text)
+    SELECT ${sessionId}::uuid, * FROM UNNEST(${keys}::text[], ${nums}::numeric[], ${texts}::text[])
+    ON CONFLICT (session_id, question_key)
+    DO UPDATE SET answer_number = EXCLUDED.answer_number, answer_text = EXCLUDED.answer_text
+  `;
+  return { ok: true };
+}
 
 export async function submitW0(
   sessionId: string,

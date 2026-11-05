@@ -2,7 +2,8 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { submitW0 } from "@/lib/actions";
+import { loadW0Draft, saveW0Draft, submitW0 } from "@/lib/actions";
+import { saveStatusText, useAutosave } from "@/lib/useAutosave";
 import {
   DEMOGRAPHICS,
   ECOG_KEY,
@@ -38,10 +39,49 @@ function W0Content() {
   const [answers, setAnswers] = useState<AnswerMap>({});
   const [submitting, setSubmitting] = useState(false);
   const [errorKeys, setErrorKeys] = useState<Set<string>>(new Set());
+  const [loaded, setLoaded] = useState(false);
+  const [resumed, setResumed] = useState(false);
 
   useEffect(() => {
     if (!sessionId) router.replace("/");
   }, [sessionId, router]);
+
+  // Pick up whatever was already saved for this session.
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    loadW0Draft(sessionId)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.status !== "ok") {
+          router.replace(res.status === "complete" ? `/survey/complete?session=${sessionId}` : "/");
+          return;
+        }
+        setAnswers(res.answers);
+        setResumed(Object.keys(res.answers).length > 0);
+        setLoaded(true);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, router]);
+
+  // Every answer is saved as it is filled in (only the ones that have a value), so closing the page loses nothing.
+  const saveState = useAutosave(answers, loaded && !!sessionId, (a) => {
+    const multiKeys = new Set(DEMOGRAPHICS.filter((q) => q.type === "multi").map((q) => q.key));
+    const rows = Object.entries(a)
+      .filter(([, val]) => !isUnanswered(val))
+      .map(([key, val]) => {
+        if (multiKeys.has(key)) return { question_key: key, answer_number: null, answer_text: String(val) };
+        const n = Number(val);
+        return { question_key: key, answer_number: !isNaN(n) ? n : null, answer_text: isNaN(n) ? String(val) : null };
+      });
+    return saveW0Draft(sessionId!, rows);
+  });
 
   function setAnswer(key: string, val: number | string) {
     setAnswers((prev) => ({ ...prev, [key]: val }));
@@ -142,12 +182,23 @@ function W0Content() {
   const sittingNumber = ipaqBaseNumber + IPAQ_ITEMS.length * 2 + 1;
   const emergencyBaseNumber = sittingNumber + 1;
 
+  if (!loaded) return <p className="text-center text-lg text-gray-600 py-20">설문을 불러오는 중...</p>;
+
   return (
     <div className="space-y-6">
+      {resumed && (
+        <div className="bg-primary-50 border-2 border-primary-200 rounded-xl px-4 py-3 text-base text-primary-900">
+          이전에 답하신 내용을 불러왔어요. 이어서 진행해 주세요.
+        </div>
+      )}
+
       {/* Header */}
       <div className="card space-y-2">
         <h2 className="text-xl font-bold text-gray-900">기본정보 설문</h2>
         <p className="text-base text-gray-700">기본정보 및 신체활동(IPAQ)에 관한 설문입니다.</p>
+      <p className={`text-sm text-center ${saveState === "error" ? "text-red-700 font-semibold" : "text-gray-600"}`} aria-live="polite">
+        {saveStatusText(saveState)}
+      </p>
       </div>
 
       {/* Error banner */}

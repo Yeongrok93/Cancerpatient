@@ -2,7 +2,8 @@
 
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { submitQlqC30 } from "@/lib/actions";
+import { loadQlqC30Draft, saveQlqC30Draft, submitQlqC30 } from "@/lib/actions";
+import { saveStatusText, useAutosave } from "@/lib/useAutosave";
 import { QLQ_QUESTIONS, FOUR_POINT_LABELS, SEVEN_POINT_LABELS } from "@/lib/qlq-c30";
 
 type AnswerMap = Record<number, number>; // question_no → answer_value (1-indexed for both scales)
@@ -19,10 +20,44 @@ function QlqContent() {
   const [answers, setAnswers] = useState<AnswerMap>({});
   const [submitting, setSubmitting] = useState(false);
   const [errorNos, setErrorNos] = useState<Set<number>>(new Set());
+  const [loaded, setLoaded] = useState(false);
+  const [resumed, setResumed] = useState(false);
 
   useEffect(() => {
     if (!sessionId) router.replace("/");
   }, [sessionId, router]);
+
+  // Pick up whatever was already saved for this session.
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    loadQlqC30Draft(sessionId)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.status !== "ok") {
+          router.replace(res.status === "complete" ? `/survey/complete?session=${sessionId}` : "/");
+          return;
+        }
+        setAnswers(res.answers);
+        setResumed(Object.keys(res.answers).length > 0);
+        setLoaded(true);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, router]);
+
+  // Every answer is saved as it is chosen, so closing the page loses nothing.
+  const saveState = useAutosave(answers, loaded && !!sessionId, (a) =>
+    saveQlqC30Draft(
+      sessionId!,
+      Object.entries(a).map(([no, v]) => ({ question_no: Number(no), answer_value: v }))
+    )
+  );
 
   const answeredCount = Object.keys(answers).length;
   const totalCount = QLQ_QUESTIONS.length;
@@ -69,8 +104,16 @@ function QlqContent() {
 
   const unansweredCount = QLQ_QUESTIONS.filter((q) => isUnanswered(answers[q.no])).length;
 
+  if (!loaded) return <p className="text-center text-lg text-gray-600 py-20">설문을 불러오는 중...</p>;
+
   return (
     <div className="space-y-6">
+      {resumed && (
+        <div className="bg-primary-50 border-2 border-primary-200 rounded-xl px-4 py-3 text-base text-primary-900">
+          이전에 답하신 내용을 불러왔어요. 이어서 진행해 주세요.
+        </div>
+      )}
+
       {/* Header */}
       <div className="card space-y-3">
         <div className="flex items-center justify-between">
@@ -86,6 +129,9 @@ function QlqContent() {
         <p className="text-base text-gray-700">
           귀하의 건강 상태와 일상 기능에 관한 질문입니다. 해당하는 응답을 선택해 주세요.
         </p>
+      <p className={`text-sm text-center ${saveState === "error" ? "text-red-700 font-semibold" : "text-gray-600"}`} aria-live="polite">
+        {saveStatusText(saveState)}
+      </p>
       </div>
 
       {/* Error banner */}

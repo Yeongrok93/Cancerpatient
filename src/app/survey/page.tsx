@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   loadProCtcaeSession,
+  saveNextVisit,
   saveProCtcaeAnswers,
   clearProCtcaeAnswers,
   submitProCtcae,
@@ -21,6 +22,7 @@ import {
 } from "@/lib/questions";
 import QuestionItem from "@/components/QuestionItem";
 import ProgressBar from "@/components/ProgressBar";
+import { useAutosave } from "@/lib/useAutosave";
 import NextVisitField, {
   EMPTY_VISIT,
   visitDraftInput,
@@ -73,6 +75,10 @@ function SurveyContent() {
   const [visitError, setVisitError] = useState(false);
   // 적립금 from surveys already completed (this one is not counted).
   const [reward, setReward] = useState(0);
+  // 다음 외래 answer is saved as soon as it is valid (not only at submit), so a reload keeps it.
+  const visitSave = useAutosave(visit, loaded && askNextVisit && !!sessionId, (v) =>
+    saveNextVisit(sessionId!, visitDraftIsValid(v) ? visitDraftInput(v) : null)
+  );
   const firstErrorRef = useRef<HTMLDivElement>(null);
 
   const categories = getCategoriesFor(sex);
@@ -356,6 +362,14 @@ function SurveyContent() {
           이전에 답하신 내용을 불러왔어요. 이어서 진행해 주세요.
         </div>
       )}
+
+      <p className={`text-sm text-center ${saveFailed || visitSave === "error" ? "text-red-700 font-semibold" : "text-gray-600"}`} aria-live="polite">
+        {saveFailed || visitSave === "error"
+          ? "⚠ 저장되지 않았어요. 인터넷 연결을 확인해 주세요."
+          : saving || visitSave === "saving"
+            ? "저장 중…"
+            : "✓ 답을 고르면 자동으로 저장돼요. 중간에 나가도 이어서 할 수 있어요."}
+      </p>
 
       {saveFailed && (
         <div className="bg-red-50 border-2 border-red-300 rounded-xl px-4 py-3 text-base text-red-800">
