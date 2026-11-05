@@ -27,9 +27,17 @@ type SurveyType = "pro_ctcae" | "qlq_c30" | "w0";
 
 // Phone numbers live in env vars, not in the repo or the admin UI:
 // SMS_SENDER = Solapi-registered sender, SMS_NOTIFY_TO = comma-separated recipients.
+// SMS_NOTIFY_EXTRA_TO = more recipients of the same registration alert (e.g. the supervising professor).
 async function smsConfig(): Promise<{ sender: string; recipients: string[] }> {
   const sender = (process.env.SMS_SENDER ?? "").trim();
-  const recipients = (process.env.SMS_NOTIFY_TO ?? "").split(",").map((n) => n.trim()).filter(Boolean);
+  const recipients = [
+    ...new Set(
+      `${process.env.SMS_NOTIFY_TO ?? ""},${process.env.SMS_NOTIFY_EXTRA_TO ?? ""}`
+        .split(",")
+        .map((n) => n.trim())
+        .filter(Boolean)
+    ),
+  ];
   if (!sender || recipients.length === 0) throw new Error("SMS_SENDER / SMS_NOTIFY_TO 환경변수가 설정되지 않았습니다.");
   return { sender, recipients };
 }
