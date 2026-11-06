@@ -20,7 +20,21 @@ function buildAuthHeader(apiKey: string, apiSecret: string) {
   return `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`;
 }
 
-export async function sendSms({ to, from, text }: { to: string | string[]; from: string; text: string }) {
+/**
+ * Sends a text now, or at `scheduledAt` (Solapi 예약발송: Solapi holds it and sends it at that time, so nothing
+ * on our side has to wait or run again). Long texts go out as LMS automatically.
+ */
+export async function sendSms({
+  to,
+  from,
+  text,
+  scheduledAt,
+}: {
+  to: string | string[];
+  from: string;
+  text: string;
+  scheduledAt?: Date;
+}) {
   const apiKey = process.env.SOLAPI_API;
   const apiSecret = process.env.SOLAPI_SECRET;
   if (!apiKey || !apiSecret) {
@@ -36,6 +50,7 @@ export async function sendSms({ to, from, text }: { to: string | string[]; from:
     },
     body: JSON.stringify({
       messages: recipients.map((recipient) => ({ to: recipient, from, text })),
+      ...(scheduledAt ? { scheduledDate: scheduledAt.toISOString() } : {}),
     }),
   });
 

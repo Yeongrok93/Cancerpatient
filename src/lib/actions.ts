@@ -83,10 +83,13 @@ async function sendApplicantConfirmation(participantId: string, name: string, co
     LIMIT 1
   `;
   if (recent) return;
+  // The applicant's only automatic text: sent 5 minutes after applying, from the researcher, asking for the
+  // next hospital visit date. Scheduled with Solapi (예약발송), so nothing here has to wait.
   await sendSms({
     to: phone,
     from: sender,
-    text: `${name}님, 연구 참여 신청이 접수되었습니다. 연구팀에서 곧 연락드리겠습니다. 감사합니다.`,
+    text: "안녕하세요, 연구담당자 정영록입니다. 연구 참여를 신청해주셔서 감사합니다. 연구과정 설명과 동의서 작성이 필요한데요, 혹시 다음 병원 방문일이 언제이신가요?",
+    scheduledAt: new Date(Date.now() + 5 * 60_000),
   });
 }
 
