@@ -19,6 +19,7 @@ import {
   type AdminMessage,
 } from "@/lib/adminActions";
 import { formatPatientCode, patientLabel } from "@/lib/patientLabel";
+import VisitCalendar from "./VisitCalendar";
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString("ko-KR", {
@@ -34,7 +35,7 @@ type Participant = AdminParticipant;
 type PatientMessage = AdminMessage;
 
 export default function AdminPage() {
-  const [tab, setTab] = useState<"patients" | "participants" | "messages">("patients");
+  const [tab, setTab] = useState<"patients" | "calendar" | "participants" | "messages">("patients");
   const [patients, setPatients] = useState<AdminPatient[]>([]);
   const [patientsLoading, setPatientsLoading] = useState(true);
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -187,7 +188,7 @@ export default function AdminPage() {
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        {(["patients", "participants", "messages"] as const).map((t) => (
+        {(["patients", "calendar", "participants", "messages"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -195,7 +196,7 @@ export default function AdminPage() {
               tab === t ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
             }`}
           >
-            {t === "patients" ? "환자" : t === "participants" ? "참여신청" : "환자 문의"}
+            {t === "patients" ? "환자" : t === "calendar" ? "외래 달력" : t === "participants" ? "참여신청" : "환자 문의"}
             {t === "messages" && unreadCount > 0 && (
               <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold">
                 {unreadCount}
@@ -233,6 +234,8 @@ export default function AdminPage() {
       )}
 
       {/* === 참여신청 탭 === */}
+      {tab === "calendar" && <VisitCalendar />}
+
       {tab === "participants" && (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100">

@@ -587,3 +587,39 @@ export async function adminSaveClinicalInfo(
   `;
   return { ok: true };
 }
+
+// ── 다음 외래 달력 ───────────────────────────────────────────────────────────────────
+
+export type AdminVisit = {
+  patient_code: string;
+  name: string;
+  date: string; // YYYY-MM-DD (Korea time)
+  time: string; // HH:MM
+  past: boolean;
+};
+
+/** Every 외래 the patients entered, plus everyone with a participant code (to show who has none on file). */
+export async function adminListVisits(): Promise<{ visits: AdminVisit[]; patients: AdminPatient[] }> {
+  await requireAdmin();
+  const rows = await sql`
+    SELECT v.patient_code, COALESCE(p.name, '') AS name, v.visit_date::text AS date,
+           to_char(v.visit_time, 'HH24:MI') AS time,
+           (((v.visit_date + v.visit_time) AT TIME ZONE 'Asia/Seoul') <= NOW()) AS past
+    FROM clinic_visits v
+    LEFT JOIN LATERAL (
+      SELECT name FROM participants WHERE patient_code = v.patient_code ORDER BY applied_at LIMIT 1
+    ) p ON TRUE
+    ORDER BY v.visit_date, v.visit_time
+    LIMIT 1000
+  `;
+  return {
+    visits: rows.map((r) => ({
+      patient_code: String(r.patient_code),
+      name: String(r.name ?? ""),
+      date: String(r.date),
+      time: String(r.time),
+      past: Boolean(r.past),
+    })),
+    patients: await adminListPatients(),
+  };
+}
