@@ -201,3 +201,7 @@ ALTER TABLE participants ADD COLUMN IF NOT EXISTS applicant_sms_error TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS links_sms_status TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS links_sms_at TIMESTAMPTZ;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS links_sms_error TEXT;
+
+-- One-off reminder date for a participant (e.g. a survey week skipped because symptoms were too heavy). The cron
+-- sends the weekly reminder on this date instead of 7 days after the last completed survey, then clears it.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS next_reminder_on DATE;

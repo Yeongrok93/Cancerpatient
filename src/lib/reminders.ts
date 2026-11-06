@@ -74,7 +74,8 @@ export async function runReminders(opts: { dryRun?: boolean; today?: string } = 
         WHERE s.patient_code = p.patient_code AND s.survey_type = 'qlq_c30' AND s.is_complete) AS qlq_count,
       (SELECT (min(s.completed_at) AT TIME ZONE 'Asia/Seoul')::date::text FROM survey_sessions s
         WHERE s.patient_code = p.patient_code AND s.survey_type = 'qlq_c30' AND s.is_complete) AS first_qlq,
-      p.study_start_date::text AS start_date
+      p.study_start_date::text AS start_date,
+      p.next_reminder_on::text AS next_on
     FROM participants p
     WHERE p.enrolled = TRUE AND p.patient_code IS NOT NULL AND p.access_token IS NOT NULL
       AND p.research_types LIKE '%설문조사%'
@@ -83,9 +84,14 @@ export async function runReminders(opts: { dryRun?: boolean; today?: string } = 
   for (const r of rows) {
     const code = String(r.patient_code);
     const lastDone: string | null = r.last_done;
-    if (!lastDone) { result.skipped.push({ patient_code: code, reason: "완료한 증상 설문 없음" }); continue; }
+    // A one-off date set by the researcher replaces "7 days after the last survey" — unless the participant has
+    // completed a survey on or after that date, in which case the normal schedule applies again.
+    const override: string | null = r.next_on && !(lastDone && lastDone >= r.next_on) ? r.next_on : null;
+    if (!lastDone && !override) { result.skipped.push({ patient_code: code, reason: "완료한 증상 설문 없음" }); continue; }
+    // reminder_log key: the override date (a new cycle) or the completed survey's date.
+    const cycle = (override ?? lastDone) as string;
 
-    const due = addDays(lastDone, REMINDER_AFTER_DAYS);
+    const due = override ?? addDays(lastDone as string, REMINDER_AFTER_DAYS);
     if (today < due) { result.skipped.push({ patient_code: code, reason: `발송 예정일 ${due}` }); continue; }
     if (today > addDays(due, LATE_GRACE_DAYS)) { result.skipped.push({ patient_code: code, reason: "발송 기한 지남" }); continue; }
 
@@ -99,7 +105,7 @@ export async function runReminders(opts: { dryRun?: boolean; today?: string } = 
 
     if (dryRun) {
       const [sentAlready] = await sql`
-        SELECT 1 FROM reminder_log WHERE participant_id = ${r.id} AND kind = 'pro_weekly' AND cycle_date = ${lastDone}::date
+        SELECT 1 FROM reminder_log WHERE participant_id = ${r.id} AND kind = 'pro_weekly' AND cycle_date = ${cycle}::date
       `;
       if (sentAlready) result.skipped.push({ patient_code: code, reason: "이미 발송함" });
       else result.would_send.push({ patient_code: code, amount, text: text.replace(r.access_token, "<token>") });
@@ -109,7 +115,7 @@ export async function runReminders(opts: { dryRun?: boolean; today?: string } = 
     // Claim the (participant, cycle) first so two overlapping runs can't both send.
     const claimed = await sql`
       INSERT INTO reminder_log (participant_id, kind, cycle_date)
-      VALUES (${r.id}, 'pro_weekly', ${lastDone}::date)
+      VALUES (${r.id}, 'pro_weekly', ${cycle}::date)
       ON CONFLICT DO NOTHING
       RETURNING id
     `;
@@ -118,6 +124,7 @@ export async function runReminders(opts: { dryRun?: boolean; today?: string } = 
     try {
       await sendSms({ to: phone, from: sender, text });
       result.sent.push({ patient_code: code, amount });
+      if (override) await sql`UPDATE participants SET next_reminder_on = NULL WHERE id = ${r.id}`;
     } catch (err) {
       await sql`DELETE FROM reminder_log WHERE id = ${claimed[0].id}`; // let the next run retry
       const message = err instanceof Error ? err.message.slice(0, 300) : "unknown error";
