@@ -8,6 +8,7 @@ import {
   adminSetStudyStartDate,
   adminSetGender,
   adminSetEnrolled,
+  type EnrollResult,
   adminSetRemark,
   adminAssignPatientCode,
   adminListMessages,
@@ -82,14 +83,32 @@ export default function AdminPage() {
   }, [tab]);
 
   async function toggleEnrolled(id: string, enrolled: boolean) {
-    const res = await adminSetEnrolled(id, enrolled).catch(() => ({ ok: false }));
+    const target = participants.find((p) => p.id === id);
+    // Ticking for the first time texts the participant their survey links.
+    if (enrolled && target && target.links_sms_status !== "sent") {
+      if (!window.confirm(`${target.name}님에게 개별 설문 링크 문자가 바로 발송돼요. 계속할까요?`)) return;
+    }
+    const res: EnrollResult = await adminSetEnrolled(id, enrolled).catch(() => ({ ok: false }));
     if (!res.ok) {
       alert("연구참여 확인 저장에 실패했습니다.");
       return;
     }
     setParticipants((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, enrolled, enrolled_at: enrolled ? new Date().toISOString() : null } : p))
+      prev.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              enrolled,
+              enrolled_at: enrolled ? new Date().toISOString() : null,
+              ...(res.links
+                ? { links_sms_status: res.links.status, links_sms_at: res.links.at, links_sms_error: res.links.error }
+                : {}),
+            }
+          : p
+      )
     );
+    if (res.links?.status === "failed") alert(`설문 링크 문자 발송에 실패했어요: ${res.links.error ?? ""}`);
+    else if (res.links?.status === "skipped") alert(`설문 링크 문자를 보내지 않았어요: ${res.links.error ?? ""}`);
   }
 
   async function toggleMessageRead(id: string, isRead: boolean) {
@@ -238,6 +257,7 @@ export default function AdminPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연구종류</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">신청일</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">문자알림</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" title="환자에게 보낸 문자">환자 문자</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">참여자번호</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" title="체크해야 자동 안내 문자 대상이 됩니다">연구참여 확인</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연구참여시작</th>
@@ -280,6 +300,16 @@ export default function AdminPage() {
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
+                      </td>
+                      <td className="px-4 py-3 text-xs whitespace-nowrap space-y-1">
+                        <SmsStatus
+                          label="5분 뒤 문자"
+                          status={p.applicant_sms_status}
+                          at={p.applicant_sms_at}
+                          error={p.applicant_sms_error}
+                          okText="예약"
+                        />
+                        <SmsStatus label="설문 링크" status={p.links_sms_status} at={p.links_sms_at} error={p.links_sms_error} okText="발송" />
                       </td>
                       <td className="px-4 py-3">
                         {assigningId === p.id ? (
@@ -436,6 +466,43 @@ export default function AdminPage() {
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** One line of 환자 문자 status: what was sent / scheduled, when, or why it was not. */
+function SmsStatus({
+  label,
+  status,
+  at,
+  error,
+  okText,
+}: {
+  label: string;
+  status: string | null;
+  at: string | null;
+  error: string | null;
+  okText: string;
+}) {
+  const time = at ? formatDate(at) : "";
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-gray-500">{label}</span>
+      {status === "scheduled" || status === "sent" ? (
+        <span className="text-green-700" title={status === "scheduled" ? "Solapi에 예약했어요. 실제 발송은 Solapi 콘솔에서 확인할 수 있어요." : ""}>
+          {okText} {time}
+        </span>
+      ) : status === "failed" ? (
+        <span className="text-red-600 font-medium" title={error ?? ""}>
+          실패
+        </span>
+      ) : status === "skipped" ? (
+        <span className="text-amber-700" title={error ?? ""}>
+          건너뜀
+        </span>
+      ) : (
+        <span className="text-gray-400">—</span>
       )}
     </div>
   );

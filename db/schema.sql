@@ -191,3 +191,13 @@ CREATE TABLE IF NOT EXISTS clinical_info (
 
 -- 다음 외래 "아직 일정이 안 잡혔어요" saved while the 증상 설문 is still in progress, so a reload keeps the choice.
 ALTER TABLE survey_sessions ADD COLUMN IF NOT EXISTS next_visit_unknown BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Texts sent to the applicant, shown in the admin 참여신청 tab.
+--  applicant_sms_*: the message scheduled 5 minutes after applying (status: scheduled / failed / skipped)
+--  links_sms_*:     the personal survey-link message sent when 연구참여 확인 is ticked (status: sent / failed / skipped)
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS applicant_sms_status TEXT;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS applicant_sms_at TIMESTAMPTZ;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS applicant_sms_error TEXT;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS links_sms_status TEXT;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS links_sms_at TIMESTAMPTZ;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS links_sms_error TEXT;

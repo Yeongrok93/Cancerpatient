@@ -8,6 +8,8 @@ import { cookies } from "next/headers";
 import { sql, serialize, isUuid } from "./db";
 import { ADMIN_COOKIE_NAME, isAdminToken } from "./adminAuth";
 import { parseSex, type Sex } from "./questions";
+import { sendSms } from "./solapi";
+import { buildLinksText } from "./welcomeSms";
 import { ADC_DRUGS } from "./adcDrugs";
 import { NOTE_KIND_BY_KEY, parseNoteKind, type NoteKind } from "./noteKinds";
 import {
@@ -41,6 +43,12 @@ export type AdminParticipant = {
   enrolled_at: string | null;
   gender: Sex | null;
   remark: string | null;
+  applicant_sms_status: "scheduled" | "failed" | "skipped" | null;
+  applicant_sms_at: string | null;
+  applicant_sms_error: string | null;
+  links_sms_status: "sent" | "failed" | "skipped" | null;
+  links_sms_at: string | null;
+  links_sms_error: string | null;
 };
 
 export type AdminMessage = {
@@ -76,7 +84,8 @@ export async function adminListParticipants(): Promise<AdminParticipant[]> {
   const rows = await sql`
     SELECT id, name, record_or_birth, contact, research_types, consent_agreed, applied_at,
            patient_code, sms_notified, sms_error, study_start_date::text AS study_start_date, access_token,
-           enrolled, enrolled_at, gender, remark
+           enrolled, enrolled_at, gender, remark,
+           applicant_sms_status, applicant_sms_at, applicant_sms_error, links_sms_status, links_sms_at, links_sms_error
     FROM participants ORDER BY applied_at DESC LIMIT 200
   `;
   return serialize(rows) as AdminParticipant[];
@@ -119,13 +128,56 @@ export async function adminSetStudyStartDate(id: string, date: string): Promise<
   return { ok: true };
 }
 
-/** 연구참여 확인 — only enrolled participants get automated reminders. */
-export async function adminSetEnrolled(id: string, enrolled: boolean): Promise<{ ok: boolean }> {
+export type EnrollResult = {
+  ok: boolean;
+  /** Set when ticking 연구참여 확인 tried to text the participant their survey links. */
+  links?: { status: "sent" | "failed" | "skipped"; at: string | null; error: string | null };
+};
+
+/**
+ * 연구참여 확인 — only enrolled participants get automated reminders. Ticking it for the first time also
+ * texts the participant their own three survey links (once: a participant who already got them is not texted
+ * again if the box is unticked and ticked later).
+ */
+export async function adminSetEnrolled(id: string, enrolled: boolean): Promise<EnrollResult> {
   await requireAdmin();
   if (!isUuid(id)) return { ok: false };
-  if (enrolled) await sql`UPDATE participants SET enrolled = TRUE, enrolled_at = COALESCE(enrolled_at, NOW()) WHERE id = ${id}`;
-  else await sql`UPDATE participants SET enrolled = FALSE, enrolled_at = NULL WHERE id = ${id}`;
-  return { ok: true };
+  if (!enrolled) {
+    await sql`UPDATE participants SET enrolled = FALSE, enrolled_at = NULL WHERE id = ${id}`;
+    return { ok: true };
+  }
+  await sql`UPDATE participants SET enrolled = TRUE, enrolled_at = COALESCE(enrolled_at, NOW()) WHERE id = ${id}`;
+
+  const [p] = await sql`SELECT contact, access_token, patient_code, links_sms_status FROM participants WHERE id = ${id}`;
+  if (!p || p.links_sms_status === "sent") return { ok: true };
+
+  const phone = String(p.contact ?? "").replace(/\D/g, "");
+  const sender = (process.env.SMS_SENDER ?? "").trim();
+  let status: "sent" | "failed" | "skipped" = "sent";
+  let error: string | null = null;
+  if (!p.patient_code || !p.access_token) {
+    status = "skipped";
+    error = "참여자번호 또는 링크 토큰이 없어 보내지 않았어요";
+  } else if (!/^01\d{8,9}$/.test(phone)) {
+    status = "skipped";
+    error = "연락처 형식이 올바르지 않아 보내지 않았어요";
+  } else if (!sender) {
+    status = "failed";
+    error = "SMS_SENDER 환경변수가 설정되지 않았습니다.";
+  } else {
+    try {
+      await sendSms({ to: phone, from: sender, text: buildLinksText(String(p.access_token)) });
+    } catch (err) {
+      console.error("Failed to send survey-links SMS:", err);
+      status = "failed";
+      error = err instanceof Error ? err.message.slice(0, 500) : "unknown error";
+    }
+  }
+  const [r] = await sql`
+    UPDATE participants SET links_sms_status = ${status}, links_sms_at = NOW(), links_sms_error = ${error}
+    WHERE id = ${id} RETURNING links_sms_at
+  `;
+  return { ok: true, links: { status, at: r?.links_sms_at ? new Date(r.links_sms_at).toISOString() : null, error } };
 }
 
 export async function adminListMessages(): Promise<AdminMessage[]> {

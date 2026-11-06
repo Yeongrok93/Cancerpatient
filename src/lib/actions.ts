@@ -69,28 +69,52 @@ async function patientExists(code: string) {
   return rows.length > 0;
 }
 
+// The applicant's only automatic text: sent 5 minutes after applying, from the researcher, asking for the
+// next hospital visit date. Scheduled with Solapi (예약발송), so nothing here has to wait.
 // Skips invalid numbers, and a number that already applied in the last 24 hours, so the
-// public form can't be used to text arbitrary people repeatedly.
-async function sendApplicantConfirmation(participantId: string, name: string, contact: string) {
+// public form can't be used to text arbitrary people repeatedly. The outcome is stored on the
+// participant row and shown in the admin 참여신청 tab.
+async function sendApplicantConfirmation(participantId: string, contact: string) {
   const phone = contact.replace(/\D/g, "");
-  if (!/^01\d{8,9}$/.test(phone)) return;
+  let status: "scheduled" | "skipped" | "failed" = "skipped";
+  let at: Date | null = null;
+  let error: string | null = null;
   const sender = (process.env.SMS_SENDER ?? "").trim();
-  if (!sender) return;
-  const [recent] = await sql`
-    SELECT 1 FROM participants
-    WHERE regexp_replace(contact, '\\D', '', 'g') = ${phone}
-      AND id <> ${participantId} AND applied_at > NOW() - INTERVAL '24 hours'
-    LIMIT 1
+  if (!/^01\d{8,9}$/.test(phone)) {
+    error = "연락처 형식이 올바르지 않아 보내지 않았어요";
+  } else if (!sender) {
+    status = "failed";
+    error = "SMS_SENDER 환경변수가 설정되지 않았습니다.";
+  } else {
+    const [recent] = await sql`
+      SELECT 1 FROM participants
+      WHERE regexp_replace(contact, '\\D', '', 'g') = ${phone}
+        AND id <> ${participantId} AND applied_at > NOW() - INTERVAL '24 hours'
+      LIMIT 1
+    `;
+    if (recent) {
+      error = "24시간 안에 같은 번호로 신청이 있어 보내지 않았어요";
+    } else {
+      at = new Date(Date.now() + 5 * 60_000);
+      try {
+        await sendSms({
+          to: phone,
+          from: sender,
+          text: "안녕하세요, 연구담당자 정영록입니다. 연구 참여를 신청해주셔서 감사합니다. 연구과정 설명과 동의서 작성이 필요한데요, 혹시 다음 병원 방문일이 언제이신가요?",
+          scheduledAt: at,
+        });
+        status = "scheduled";
+      } catch (err) {
+        console.error("Failed to schedule applicant follow-up SMS:", err);
+        status = "failed";
+        error = err instanceof Error ? err.message.slice(0, 500) : "unknown error";
+      }
+    }
+  }
+  await sql`
+    UPDATE participants SET applicant_sms_status = ${status}, applicant_sms_at = ${at?.toISOString() ?? null}, applicant_sms_error = ${error}
+    WHERE id = ${participantId}
   `;
-  if (recent) return;
-  // The applicant's only automatic text: sent 5 minutes after applying, from the researcher, asking for the
-  // next hospital visit date. Scheduled with Solapi (예약발송), so nothing here has to wait.
-  await sendSms({
-    to: phone,
-    from: sender,
-    text: "안녕하세요, 연구담당자 정영록입니다. 연구 참여를 신청해주셔서 감사합니다. 연구과정 설명과 동의서 작성이 필요한데요, 혹시 다음 병원 방문일이 언제이신가요?",
-    scheduledAt: new Date(Date.now() + 5 * 60_000),
-  });
 }
 
 export async function registerParticipant(input: {
@@ -137,11 +161,11 @@ export async function registerParticipant(input: {
     await sql`UPDATE participants SET sms_notified = FALSE, sms_error = ${message} WHERE id = ${row.id}`;
   }
 
-  // Tell the applicant the request arrived. Best effort: it never fails the registration.
+  // Schedule the applicant's follow-up text. Best effort: it never fails the registration.
   try {
-    await sendApplicantConfirmation(row.id, name, contact);
+    await sendApplicantConfirmation(row.id, contact);
   } catch (err) {
-    console.error("Failed to send applicant confirmation SMS:", err);
+    console.error("Failed to schedule applicant follow-up SMS:", err);
   }
   return { ok: true };
 }
