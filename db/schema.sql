@@ -171,6 +171,21 @@ CREATE TABLE IF NOT EXISTS clinic_visits (
 
 CREATE INDEX IF NOT EXISTS idx_clinic_visits_patient ON clinic_visits (patient_code, visit_date DESC, visit_time DESC);
 
+-- 마지막 표적항암제(ADC) 투여일: asked on the first screen of a 증상 설문 (see src/lib/actions.ts,
+-- lastDoseDue). Once answered it is not asked again until a clinic visit recorded after the answer has
+-- passed (the next 외래 is when a new dose is given). dose_date NULL = "기억나지 않거나 아직 투여받지
+-- 않았어요". created_at is when the question was first answered. One row per survey session at most.
+CREATE TABLE IF NOT EXISTS adc_doses (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_code TEXT NOT NULL,
+  session_id   UUID REFERENCES survey_sessions(id) ON DELETE SET NULL,
+  dose_date    DATE,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (session_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_adc_doses_patient ON adc_doses (patient_code, created_at DESC);
+
 -- Researcher Notes: kind of entry (call / missed / sms / visit / intervention / external / note).
 -- Contact-type entries may have an empty body. See src/lib/noteKinds.ts.
 ALTER TABLE nursing_notes ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'note';

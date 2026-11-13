@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   adminGetNextVisit,
+  adminGetLastDose,
   adminGetPatientDashboard,
   adminListNotes,
   adminListPatients,
@@ -200,8 +201,22 @@ export default function PatientDashboardPage() {
   const [patients, setPatients] = useState<AdminPatient[]>([]);
   const [view, setView] = useState<ViewMode>("composite");
   const [nextVisit, setNextVisit] = useState<{ date: string; time: string; past: boolean } | null>(null);
+  const [lastDose, setLastDose] = useState<{ date: string | null; daysAgo: number | null } | null>(null);
   const [notes, setNotes] = useState<ResearcherNote[]>([]);
   const [notesLoading, setNotesLoading] = useState(true);
+
+  useEffect(() => {
+    if (!code) return;
+    let cancelled = false;
+    adminGetLastDose(code)
+      .then((v) => {
+        if (!cancelled) setLastDose(v);
+      })
+      .catch((err) => console.error(err));
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
 
   useEffect(() => {
     if (!code) return;
@@ -399,6 +414,13 @@ export default function PatientDashboardPage() {
             >
               진료용 PDF
             </a>
+            {lastDose && (
+              <span className="text-xs px-3 py-1.5 rounded-lg font-medium bg-gray-100 text-gray-700">
+                {lastDose.date
+                  ? `마지막 표적항암제 ${lastDose.date.slice(5).replace("-", "/")}${lastDose.daysAgo !== null ? ` (D+${lastDose.daysAgo})` : ""}`
+                  : "마지막 투여일 미상"}
+              </span>
+            )}
             {nextVisit && (
               <span
                 className={`text-xs px-3 py-1.5 rounded-lg font-medium ${

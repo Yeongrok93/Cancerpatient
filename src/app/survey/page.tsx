@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   loadProCtcaeSession,
   saveNextVisit,
+  saveLastDose,
   saveProCtcaeAnswers,
   clearProCtcaeAnswers,
   submitProCtcae,
@@ -29,6 +30,12 @@ import NextVisitField, {
   visitDraftIsValid,
   type VisitDraft,
 } from "@/components/NextVisitField";
+import LastDoseField, {
+  EMPTY_DOSE,
+  doseDraftInput,
+  doseDraftIsValid,
+  type DoseDraft,
+} from "@/components/LastDoseField";
 
 type AnswerMap = Record<string, number | boolean | null>;
 
@@ -79,6 +86,13 @@ function SurveyContent() {
   const visitSave = useAutosave(visit, loaded && askNextVisit && !!sessionId, (v) =>
     saveNextVisit(sessionId!, visitDraftIsValid(v) ? visitDraftInput(v) : null)
   );
+  // 마지막 표적항암제 투여일 — asked once, then not again until the next recorded visit has passed.
+  const [askLastDose, setAskLastDose] = useState(false);
+  const [dose, setDose] = useState<DoseDraft>(EMPTY_DOSE);
+  const [doseError, setDoseError] = useState(false);
+  const doseSave = useAutosave(dose, loaded && askLastDose && !!sessionId, (v) =>
+    saveLastDose(sessionId!, doseDraftIsValid(v) ? doseDraftInput(v) : null)
+  );
   const firstErrorRef = useRef<HTMLDivElement>(null);
 
   const categories = getCategoriesFor(sex);
@@ -126,6 +140,7 @@ function SurveyContent() {
       setAnswers(map);
       setSex(loadedSex);
       setAskNextVisit(res.askNextVisit);
+      setAskLastDose(res.askLastDose);
       setReward(res.rewardSoFar);
       setCategoryIdx(firstOpen === -1 ? cats.length - 1 : firstOpen);
       setResumed(Object.keys(map).length > 0);
@@ -254,6 +269,11 @@ function SurveyContent() {
   }, [sessionId, currentItems, answers]);
 
   async function handleNext() {
+    if (categoryIdx === 0 && askLastDose && !doseDraftIsValid(dose)) {
+      setDoseError(true);
+      document.getElementById("last-dose")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
     if (categoryIdx === 0 && askNextVisit && !visitDraftIsValid(visit)) {
       setVisitError(true);
       document.getElementById("next-visit")?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -302,6 +322,13 @@ function SurveyContent() {
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
+    if (askLastDose && !doseDraftIsValid(dose)) {
+      alert("첫 화면의 '마지막 표적항암제 투여일'을 먼저 골라 주세요. 첫 화면으로 이동합니다.");
+      setDoseError(true);
+      setCategoryIdx(0);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     if (askNextVisit && !visitDraftIsValid(visit)) {
       // The question sits on the first screen; a resumed survey may have skipped past it.
       alert("첫 화면의 '다음 외래 날짜와 시간'을 먼저 골라 주세요. 첫 화면으로 이동합니다.");
@@ -313,7 +340,12 @@ function SurveyContent() {
     setSubmitting(true);
     try {
       await saveCurrentCategory();
-      const result = await submitProCtcae(sessionId, additionalComment, askNextVisit ? visitDraftInput(visit) : null);
+      const result = await submitProCtcae(
+        sessionId,
+        additionalComment,
+        askNextVisit ? visitDraftInput(visit) : null,
+        askLastDose ? doseDraftInput(dose) : null
+      );
       if (!result.ok) throw new Error(result.error);
       router.push(`/survey/complete?session=${sessionId}`);
     } catch (err) {
@@ -363,10 +395,10 @@ function SurveyContent() {
         </div>
       )}
 
-      <p className={`text-sm text-center ${saveFailed || visitSave === "error" ? "text-red-700 font-semibold" : "text-gray-600"}`} aria-live="polite">
-        {saveFailed || visitSave === "error"
+      <p className={`text-sm text-center ${saveFailed || visitSave === "error" || doseSave === "error" ? "text-red-700 font-semibold" : "text-gray-600"}`} aria-live="polite">
+        {saveFailed || visitSave === "error" || doseSave === "error"
           ? "⚠ 저장되지 않았어요. 인터넷 연결을 확인해 주세요."
-          : saving || visitSave === "saving"
+          : saving || visitSave === "saving" || doseSave === "saving"
             ? "저장 중…"
             : "✓ 답을 고르면 자동으로 저장돼요. 중간에 나가도 이어서 할 수 있어요."}
       </p>
@@ -375,6 +407,18 @@ function SurveyContent() {
         <div className="bg-red-50 border-2 border-red-300 rounded-xl px-4 py-3 text-base text-red-800">
           ⚠ 답변이 저장되지 않았어요. 인터넷 연결을 확인해 주세요.
         </div>
+      )}
+
+      {/* 마지막 표적항암제 투여일 (first screen) */}
+      {categoryIdx === 0 && askLastDose && (
+        <LastDoseField
+          value={dose}
+          onChange={(v) => {
+            setDose(v);
+            setDoseError(false);
+          }}
+          showError={doseError}
+        />
       )}
 
       {/* 다음 외래 일정 (first screen) */}

@@ -422,6 +422,73 @@ export async function saveNextVisit(
   return { ok: true };
 }
 
+// ── 마지막 표적항암제(ADC) 투여일 ─────────────────────────────────
+
+export type LastDoseInput = { date: string } | { unknown: true };
+
+/**
+ * True when the 마지막 투여일 question should be asked: nothing answered yet, or a clinic visit that
+ * was recorded after the last answer has since passed (the visit is when a new dose is given).
+ * Once answered, it is not asked again until then.
+ */
+async function lastDoseDue(code: string | null): Promise<boolean> {
+  if (!code) return false;
+  const [last] = await sql`
+    SELECT EXISTS (
+      SELECT 1 FROM clinic_visits v
+      WHERE v.patient_code = d.patient_code
+        AND ((v.visit_date + v.visit_time) AT TIME ZONE 'Asia/Seoul') > d.created_at
+        AND ((v.visit_date + v.visit_time) AT TIME ZONE 'Asia/Seoul') <= NOW()
+    ) AS visit_passed
+    FROM adc_doses d
+    WHERE d.patient_code = ${code}
+    ORDER BY d.created_at DESC
+    LIMIT 1
+  `;
+  return !last || !!last.visit_passed;
+}
+
+/** A real, non-future date within the last 3 years, "unknown", or null when the input is unusable. */
+function parseLastDose(v: unknown): { date: string } | "unknown" | null {
+  if (!v || typeof v !== "object") return null;
+  if ((v as { unknown?: unknown }).unknown === true) return "unknown";
+  const { date } = v as { date?: unknown };
+  if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  const [y, m, d] = date.split("-").map(Number);
+  const check = new Date(Date.UTC(y, m - 1, d));
+  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== m - 1 || check.getUTCDate() !== d) return null;
+  const today = kstToday();
+  if (date > today || date < addDays(today, -3 * 366)) return null;
+  return { date };
+}
+
+async function upsertDose(code: string, sessionId: string, doseDate: string | null) {
+  await sql`
+    INSERT INTO adc_doses (patient_code, session_id, dose_date)
+    VALUES (${code}, ${sessionId}, ${doseDate}::date)
+    ON CONFLICT (session_id) DO UPDATE SET dose_date = EXCLUDED.dose_date
+  `;
+}
+
+/**
+ * Saves the 마지막 투여일 answer while the 증상 설문 is still being filled in, so a reload or a
+ * closed page keeps it. An incomplete draft (null) changes nothing.
+ */
+export async function saveLastDose(
+  sessionId: string,
+  lastDose: LastDoseInput | null
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const open = await getOpenSession(sessionId, "pro_ctcae");
+  if (open.error) return { ok: false, error: open.error };
+  const code = await getSessionPatientCode(sessionId);
+  if (!code) return { ok: false, error: "not_found" };
+  if (lastDose === null) return { ok: true };
+  const dose = parseLastDose(lastDose);
+  if (!dose) return { ok: false, error: "invalid" };
+  await upsertDose(code, sessionId, dose === "unknown" ? null : dose.date);
+  return { ok: true };
+}
+
 /** A valid future visit, "unknown", or null when the input is unusable. */
 function parseNextVisit(v: unknown): { date: string; time: string } | "unknown" | null {
   if (!v || typeof v !== "object") return null;
@@ -446,7 +513,7 @@ const PRO_QUESTIONS = new Map(
 export async function loadProCtcaeSession(
   sessionId: string
 ): Promise<
-  | { status: "ok"; answers: ProCtcaeAnswer[]; sex: Sex | null; askNextVisit: boolean; rewardSoFar: number }
+  | { status: "ok"; answers: ProCtcaeAnswer[]; sex: Sex | null; askNextVisit: boolean; askLastDose: boolean; rewardSoFar: number }
   | { status: "complete" | "not_found" }
 > {
   const open = await getOpenSession(sessionId, "pro_ctcae");
@@ -460,6 +527,7 @@ export async function loadProCtcaeSession(
     status: "ok",
     sex: await sexForSession(sessionId),
     askNextVisit: (await nextVisitDue(code)) && !(await sessionVisitUnknown(sessionId)),
+    askLastDose: await lastDoseDue(code),
     rewardSoFar: await rewardSoFar(code),
     answers: rows.map((r) => ({
       item_id: r.item_id,
@@ -528,7 +596,8 @@ export async function clearProCtcaeAnswers(
 export async function submitProCtcae(
   sessionId: string,
   additionalComment: string,
-  nextVisit?: NextVisitInput | null
+  nextVisit?: NextVisitInput | null,
+  lastDose?: LastDoseInput | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const open = await getOpenSession(sessionId, "pro_ctcae");
   if (open.error) return { ok: false, error: open.error };
@@ -549,6 +618,12 @@ export async function submitProCtcae(
     const unknownSaved = !visit && (await sessionVisitUnknown(sessionId));
     if (!visit && !unknownSaved) return { ok: false, error: "next_visit_required" };
     if (visit && visit !== "unknown") await upsertVisit(code!, sessionId, visit);
+  }
+  // 마지막 투여일: asked until answered, then again after the next recorded visit has passed.
+  if (await lastDoseDue(code)) {
+    const dose = parseLastDose(lastDose);
+    if (!dose) return { ok: false, error: "last_dose_required" };
+    await upsertDose(code!, sessionId, dose === "unknown" ? null : dose.date);
   }
   const comment = String(additionalComment ?? "").trim().slice(0, 5000) || null;
   await sql`

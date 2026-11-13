@@ -255,6 +255,19 @@ export async function adminGetNextVisit(
   return r ? { date: String(r.date), time: String(r.time), past: Boolean(r.past) } : null;
 }
 
+/** The latest 마지막 표적항암제 투여일 the patient entered in a 증상 설문; `date` null = "기억나지 않거나 아직 투여받지 않았어요". */
+export async function adminGetLastDose(patientCode: string): Promise<{ date: string | null; daysAgo: number | null } | null> {
+  await requireAdmin();
+  const [r] = await sql`
+    SELECT dose_date::text AS date,
+           ((NOW() AT TIME ZONE 'Asia/Seoul')::date - dose_date) AS days_ago
+    FROM adc_doses WHERE patient_code = ${patientCode}
+    ORDER BY created_at DESC LIMIT 1
+  `;
+  if (!r) return null;
+  return { date: r.date ? String(r.date) : null, daysAgo: r.days_ago === null ? null : Number(r.days_ago) };
+}
+
 // ── Researcher Notes (per patient, free text + date + kind; stored in the nursing_notes table) ──────────
 
 export type ResearcherNote = {
