@@ -9,6 +9,8 @@ import { renderReportHtml } from "@/lib/report";
 //   ?print=1                                → also opens the print dialog on load
 //   ?date=YYYY-MM-DD                        → print that date as 작성일
 //   ?lang=en                                → English version
+//   ?range=all                              → every survey (default: the latest 항암 cycle, or Baseline–2주차
+//                                             before any 항암일 is on file)
 //   ?sample=1                               → layout preview with made-up notes; only when
 //                                             ALLOW_REPORT_SAMPLE=1 (local use)
 // The same document is produced from the command line with `npm run report`.
@@ -30,6 +32,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ code
     autoPrint: q.get("print") === "1",
     sampleNotes: q.get("sample") === "1" && process.env.ALLOW_REPORT_SAMPLE === "1",
     lang: q.get("lang") === "en" ? "en" : "ko",
+    range: q.get("range") === "all" ? "all" : "cycle",
   });
   if (!input) return NextResponse.json({ error: "not found" }, { status: 404 });
 

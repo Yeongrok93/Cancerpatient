@@ -21,6 +21,7 @@ import { NOTE_KINDS, isTimelineKind } from "@/lib/noteKinds";
 import ResearcherNotes, { sortNotes } from "./ResearcherNotes";
 import QlqEditor from "./QlqEditor";
 import PatientInfoEditor from "./PatientInfoEditor";
+import ChemoDates from "./ChemoDates";
 
 type ViewMode = "composite" | "raw" | "notes" | "qlq" | "info";
 
@@ -414,6 +415,15 @@ export default function PatientDashboardPage() {
             >
               진료용 PDF
             </a>
+            <a
+              href={`/api/admin/report/${encodeURIComponent(code)}?print=1&range=all`}
+              target="_blank"
+              rel="noopener"
+              title="최근 항암 주기가 아니라 모든 설문을 담은 PDF"
+              className="text-xs px-2 py-1.5 text-gray-500 hover:text-gray-800 hover:underline"
+            >
+              전체 기간
+            </a>
             {lastDose && (
               <span className="text-xs px-3 py-1.5 rounded-lg font-medium bg-gray-100 text-gray-700">
                 {lastDose.date
@@ -468,6 +478,8 @@ export default function PatientDashboardPage() {
             </div>
           )}
         </div>
+
+        <ChemoDates code={code} />
 
         {alertGroups.length > 0 && (
           <div className="bg-white border border-gray-900 rounded-xl p-4 space-y-3">

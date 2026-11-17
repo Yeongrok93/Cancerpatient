@@ -9,9 +9,25 @@ import { formatPatientCode } from "./patientLabel";
 import type { NotesSummary } from "./notesSummary";
 
 /** Bump when the layout or wording of the document changes. Printed in the footer. */
-export const REPORT_TEMPLATE_VERSION = "12";
+export const REPORT_TEMPLATE_VERSION = "13";
 
-export type ReportSession = { id: string; completed_at: string | null };
+/** `week`: position among all of the patient's completed surveys (0 = Baseline), kept when only a window is printed. */
+export type ReportSession = { id: string; completed_at: string | null; week?: number };
+
+/**
+ * Which surveys the hand-out covers.
+ *  - "first": no 항암일 on file before the print date → Baseline … 2주차
+ *  - "cycle": from 1 week before the latest 항암일 (`chemo`) to the print date
+ *  - "all":   every survey
+ * Comparisons ("Grade가 올라간 증상") are made against the window's first survey, except in "all" mode
+ * (previous survey).
+ */
+export type ReportPeriod = {
+  mode: "first" | "cycle" | "all";
+  chemo: string | null; // YYYY-MM-DD
+  chemoDates: string[]; // all 항암일 on file, oldest first
+  asOf: string; // YYYY-MM-DD (KST)
+};
 export type ReportAnswer = {
   session_id: string;
   item_id: number;
@@ -38,6 +54,8 @@ export type ReportInput = {
   dataId?: string;
   /** Adds a screen-only "print" bar and opens the print dialog on load. */
   autoPrint?: boolean;
+  /** Survey window (see ReportPeriod). Without it the document behaves as "all". */
+  period?: ReportPeriod;
 };
 
 type ItemSeries = { item: SurveyItem; grades: (number | null)[]; values: Record<string, number>[] };
@@ -74,7 +92,16 @@ type Copy = {
   pageTitle: (name: string) => string;
   issued: string;
   s1: string;
-  s2: string;
+  s2: (ref: string) => string;
+  refPrev: string;
+  refBaseline: string;
+  refPreChemo: string;
+  refFirst: string;
+  refShort: { prev: string; baseline: string; preChemo: string; first: string };
+  chemoMark: (d: string) => string;
+  periodFirst: (range: string, n: number, noChemo: boolean) => string;
+  periodCycle: (chemo: string, range: string, n: number) => string;
+  periodAll: (range: string, n: number) => string;
   s3: string;
   s3sub: string;
   sTraj: string;
@@ -107,7 +134,16 @@ const COPY: Record<ReportLang, Copy> = {
     pageTitle: (n) => `${n} PRO-CTCAE 증상 설문 요약`,
     issued: "작성일",
     s1: "1. 현재 Grade 3 (중증) 증상",
-    s2: "2. 이전 설문보다 Grade가 올라간 증상",
+    s2: (ref) => `2. ${ref}보다 Grade가 올라간 증상`,
+    refPrev: "이전 설문",
+    refBaseline: "Baseline",
+    refPreChemo: "항암 전 설문",
+    refFirst: "기간 첫 설문",
+    refShort: { prev: "이전", baseline: "Baseline", preChemo: "항암 전", first: "기간 첫 설문" },
+    chemoMark: (d) => `항암 ${d}`,
+    periodFirst: (range, n, noChemo) => `첫 진료 요약 · Baseline ~ 2주차 (${range}, ${n}회)${noChemo ? " · 항암일 미입력" : ""}`,
+    periodCycle: (chemo, range, n) => `최근 항암 ${chemo} · 항암 1주 전부터의 설문 ${range} (${n}회)`,
+    periodAll: (range, n) => `전체 설문 ${range} (${n}회)`,
     s3: "3. 증상 부담 추이",
     s3sub: "설문별 Grade별 증상 수",
     sTraj: "4. 증상별 변화",
@@ -138,7 +174,17 @@ const COPY: Record<ReportLang, Copy> = {
     pageTitle: (n) => `${n} – PRO-CTCAE Symptom Summary`,
     issued: "Date",
     s1: "1. Current Grade 3 (Severe) Symptoms",
-    s2: "2. Symptoms with a Higher Grade than the Previous Survey",
+    s2: (ref) => `2. Symptoms with a Higher Grade than the ${ref}`,
+    refPrev: "Previous Survey",
+    refBaseline: "Baseline",
+    refPreChemo: "Pre-treatment Survey",
+    refFirst: "First Survey of the Period",
+    refShort: { prev: "previous", baseline: "baseline", preChemo: "pre-treatment", first: "first of period" },
+    chemoMark: (d) => `Treatment ${d}`,
+    periodFirst: (range, n, noChemo) =>
+      `First visit summary · Baseline – Week 2 (${range}, ${n} surveys)${noChemo ? " · no treatment date on file" : ""}`,
+    periodCycle: (chemo, range, n) => `Latest treatment ${chemo} · surveys from 1 week before: ${range} (${n})`,
+    periodAll: (range, n) => `All surveys ${range} (${n})`,
     s3: "3. Symptom Burden Trend",
     s3sub: "Number of symptoms at each grade, by survey",
     sTraj: "4. Symptom Trajectories",
@@ -187,9 +233,32 @@ function mmdd(iso: string | null): string {
   return `${m}.${d}`;
 }
 
-function weekName(i: number, c: Copy): string {
-  return c.week(i);
+/** Week label of the survey at position `i` of the printed list (its week among all the patient's surveys). */
+function weekName(sessions: ReportSession[], i: number, c: Copy): string {
+  return c.week(sessions[i]?.week ?? i);
 }
+
+const sessionDay = (s: ReportSession) => (s.completed_at ? kstDate(new Date(s.completed_at)) : "");
+
+/**
+ * 항암일 placed between the printed surveys: for each survey, the 항암일 that fall after the previous survey's day
+ * and before this survey's day (a survey on the 항암일 itself counts as before treatment). `tail` = after the last.
+ */
+function chemoMarkers(sessions: ReportSession[], chemoDates: string[], asOf: string): { before: string[][]; tail: string[] } {
+  const days = sessions.map(sessionDay);
+  const before: string[][] = sessions.map(() => []);
+  const tail: string[] = [];
+  if (days.length === 0) return { before, tail };
+  for (const d of chemoDates) {
+    if (d >= asOf || d <= days[0]) continue; // not yet given / before the first printed survey (shown in the header)
+    const i = days.findIndex((day) => day > d);
+    if (i === -1) tail.push(d);
+    else before[i].push(d);
+  }
+  return { before, tail };
+}
+
+const dot = (ymd: string) => `${ymd.slice(5, 7)}.${ymd.slice(8, 10)}`;
 
 export function splitTerm(term: string): { main: string; note: string } {
   const m = term.match(/^(.*?)\s*\((.*)\)\s*$/);
@@ -252,23 +321,47 @@ function sparkline(grades: (number | null)[]): string {
 }
 
 /** One stacked bar per survey: how many symptoms sat at each grade. */
-function distributionChart(series: ItemSeries[], sessions: ReportSession[], c: Copy): string {
+function distributionChart(
+  series: ItemSeries[],
+  sessions: ReportSession[],
+  c: Copy,
+  markers: { before: string[][]; tail: string[] }
+): string {
   const first = Math.max(0, sessions.length - MAX_TREND_ROWS);
   const shown = sessions.map((s, i) => ({ s, i })).slice(first);
-  const rowH = 19, barH = 12, labelW = 98, barW = 390, totalW = 64;
+  const rowH = 19, barH = 12, labelW = 98, barW = 390, totalW = 64, markH = 13;
   const rows = shown.map(({ s, i }) => {
     const counts = [0, 0, 0, 0];
     for (const it of series) {
       const g = it.grades[i];
       if (g !== null) counts[g] += 1;
     }
-    return { label: `${weekName(i, c)} (${mmdd(s.completed_at)})`, counts, total: counts.reduce((a, b) => a + b, 0) };
+    return { label: `${weekName(sessions, i, c)} (${mmdd(s.completed_at)})`, counts, total: counts.reduce((a, b) => a + b, 0), marks: markers.before[i] };
   });
   const maxTotal = Math.max(1, ...rows.map((r) => r.total));
-  const height = rows.length * rowH + 2;
+  // Layout: each 항암일 is a dashed line above the first survey after it.
+  let y = 2;
+  const markLine = (d: string, yy: number) =>
+    `<line x1="${labelW - 2}" x2="${labelW + barW}" y1="${yy + 6}" y2="${yy + 6}" stroke="#6d28d9" stroke-width="1" stroke-dasharray="3 2"/>` +
+    `<text x="${labelW - 6}" y="${yy + 9}" text-anchor="end" font-size="9" font-weight="700" fill="#6d28d9">▼ ${esc(c.chemoMark(dot(d)))}</text>`;
+  const parts: string[] = [];
+  const tops = rows.map((r) => {
+    for (const d of r.marks) {
+      parts.push(markLine(d, y));
+      y += markH;
+    }
+    const top = y;
+    y += rowH;
+    return top;
+  });
+  for (const d of markers.tail) {
+    parts.push(markLine(d, y));
+    y += markH;
+  }
+  const height = y;
   const bars = rows
     .map((r, i) => {
-      const yTop = i * rowH + 2;
+      const yTop = tops[i];
       let xCur = labelW;
       const segs = r.counts
         .map((c, g) => {
@@ -283,7 +376,7 @@ function distributionChart(series: ItemSeries[], sessions: ReportSession[], c: C
       return `<text x="${labelW - 6}" y="${yTop + 9.5}" text-anchor="end" font-size="9.5" fill="#222">${esc(r.label)}</text>${segs}<text x="${labelW + barW + 6}" y="${yTop + 9.5}" font-size="9.5" fill="#222">${c.unit(r.total)}</text>`;
     })
     .join("");
-  return `<svg viewBox="0 0 ${labelW + barW + totalW} ${height}" width="100%" role="img" aria-label="${esc(c.chartAria)}">${bars}</svg>`;
+  return `<svg viewBox="0 0 ${labelW + barW + totalW} ${height}" width="100%" role="img" aria-label="${esc(c.chartAria)}">${parts.join("")}${bars}</svg>`;
 }
 
 function legend(c: Copy): string {
@@ -358,7 +451,7 @@ function noteEmphasisIds(rows: KeyRow[], lang: ReportLang, notesText: string | n
 }
 
 /** A few terse lines for a doctor who reads only this box. Symptoms the notes single out come first in each list, marked ★. */
-function keyFindings(rows: KeyRow[], sessions: ReportSession[], last: number, lang: ReportLang, emph: Set<number>): string[] {
+function keyFindings(rows: KeyRow[], last: number, hasRef: boolean, refWord: string, lang: ReportLang, emph: Set<number>): string[] {
   if (last < 0) return [];
   const ko = lang === "ko";
   const name = (r: KeyRow) => `${emph.has(r.it.item.id) ? "★ " : ""}${termParts(r.it.item, lang).main}`;
@@ -367,20 +460,20 @@ function keyFindings(rows: KeyRow[], sessions: ReportSession[], last: number, la
     const shown = ordered.slice(0, max).map(name).join(", ");
     return ordered.length > max ? shown + (ko ? ` 외 ${ordered.length - max}개` : ` +${ordered.length - max} more`) : shown;
   };
-  const hasPrev = last >= 1;
+  const hasPrev = hasRef;
   const graded = rows.filter((r) => r.cur !== null);
   const g3 = graded.filter((r) => r.cur === 3);
   const out: string[] = [];
 
-  // 1. Grade 3 count (with the previous count) and where they cluster
+  // 1. Grade 3 count (with the reference survey's count) and where they cluster
   const g3Prev = hasPrev ? rows.filter((r) => r.prev === 3).length : null;
   const where = g3.length >= 2 ? `: ${categoryCounts(g3, lang)}` : "";
   if (g3.length === 0) out.push(ko ? "Grade 3 증상 없음" : "No Grade 3 symptoms");
   else
     out.push(
       ko
-        ? `Grade 3 증상 ${g3.length}개${g3Prev !== null ? ` (이전 ${g3Prev}개)` : ""}${where}`
-        : `Grade 3 symptoms: ${g3.length}${g3Prev !== null ? ` (previous ${g3Prev})` : ""}${where}`
+        ? `Grade 3 증상 ${g3.length}개${g3Prev !== null ? ` (${refWord} ${g3Prev}개)` : ""}${where}`
+        : `Grade 3 symptoms: ${g3.length}${g3Prev !== null ? ` (${refWord} ${g3Prev})` : ""}${where}`
     );
 
   // 2. newly Grade 3
@@ -422,11 +515,29 @@ export function renderReportHtml(input: ReportInput): string {
   const last = sessions.length - 1;
   const showSpark = sessions.length >= 3;
 
-  const prevLabel = last >= 1 ? `${weekName(last - 1, c)} (${mmdd(sessions[last - 1].completed_at)})` : null;
+  // Reference survey for "올라간 증상": the window's first survey (pre-treatment / Baseline), or the previous one in "all" mode.
+  const period = input.period;
+  const mode = period?.mode ?? "all";
+  const ref = last < 1 ? -1 : mode === "all" ? last - 1 : 0;
+  const preChemo = mode === "cycle" && period?.chemo && ref === 0 && sessionDay(sessions[0]) <= period.chemo;
+  const refKey: keyof Copy["refShort"] =
+    mode === "all" ? "prev" : mode === "first" && sessions[0]?.week === 0 ? "baseline" : preChemo ? "preChemo" : mode === "cycle" ? "first" : "prev";
+  const refName = { prev: c.refPrev, baseline: c.refBaseline, preChemo: c.refPreChemo, first: c.refFirst }[refKey];
+  const prevLabel = ref >= 0 ? `${weekName(sessions, ref, c)} (${mmdd(sessions[ref].completed_at)})` : null;
+  const markers = chemoMarkers(sessions, period?.chemoDates ?? [], period?.asOf ?? kstDate(generatedAt));
+
+  const range = sessions.length === 0 ? "" : `${mmdd(sessions[0].completed_at)} – ${mmdd(sessions[last].completed_at)}`;
+  const periodLine = !period
+    ? ""
+    : period.mode === "cycle" && period.chemo
+      ? c.periodCycle(period.chemo.replace(/-/g, "."), range, sessions.length)
+      : period.mode === "first"
+        ? c.periodFirst(range, sessions.length, period.chemoDates.length === 0)
+        : c.periodAll(range, sessions.length);
 
   const rows = series.map((it) => {
     const cur = last >= 0 ? it.grades[last] : null;
-    const prev = last >= 1 ? it.grades[last - 1] : null;
+    const prev = ref >= 0 ? it.grades[ref] : null;
     return { it, cur, prev, grade3: cur === 3, increased: cur !== null && prev !== null && cur > prev };
   });
   type Row = (typeof rows)[number];
@@ -496,7 +607,10 @@ export function renderReportHtml(input: ReportInput): string {
       const inCat = list.filter((r) => r.it.item.category === category);
       return inCat.length === 0 ? "" : `<div class="cb"><div class="ch">${esc(categoryLabel(category, lang))}</div>${inCat.map(chip).join("")}</div>`;
     }).join("");
-    const heads = sessions.map((x, i) => `${weekName(i, c)} ${mmdd(x.completed_at)}`).join(" → ");
+    const heads = sessions
+      .map((x, i) => [...markers.before[i].map((d) => `▼${c.chemoMark(dot(d))}`), `${weekName(sessions, i, c)} ${mmdd(x.completed_at)}`].join(" → "))
+      .concat(markers.tail.map((d) => `▼${c.chemoMark(dot(d))}`))
+      .join(" → ");
     return `<h2>${esc(c.sTraj)} <span class="cnt">${esc(c.sTrajSub)}</span></h2><p class="muted" style="margin:2px 0 4px;font-size:8pt">${esc(heads)}</p><div class="cols cols3">${blocks}</div>`;
   };
   const trajSection = trajHtml();
@@ -510,11 +624,11 @@ export function renderReportHtml(input: ReportInput): string {
     <h2>${esc(c.s1)}</h2>
     ${grade3Rows.length === 0 ? `<p class="none">${esc(c.noneG3)}</p>` : columnsHtml(grade3Rows, true)}
 
-    <h2>${esc(c.s2)}</h2>
+    <h2>${esc(c.s2(refName))}${prevLabel ? ` <span class="cnt">${esc(prevLabel)}</span>` : ""}</h2>
     ${!prevLabel ? `<p class="none">${esc(c.noPrev)}</p>` : upRows.length === 0 ? `<p class="none">${esc(c.noneG3)}</p>` : chipRowsHtml(upRows)}
 
     <h2>${esc(c.s3)} <span class="cnt">${esc(c.s3sub)}${sessions.length > MAX_TREND_ROWS ? esc(c.s3recent(MAX_TREND_ROWS)) : ""}</span></h2>
-    ${distributionChart(series, sessions, c)}
+    ${distributionChart(series, sessions, c, markers)}
 
     ${trajSection}`;
 
@@ -535,6 +649,7 @@ export function renderReportHtml(input: ReportInput): string {
   header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; border-bottom: 2px solid #111; padding-bottom: 5px; margin-bottom: 8px; }
   header .ttl { font-size: 14.5pt; font-weight: 700; letter-spacing: -0.2px; line-height: 1.2; }
   header .who { text-align: right; font-size: 9pt; white-space: nowrap; } header .who b { font-size: 11pt; }
+  .period { margin: -3px 0 4px; font-size: 9pt; font-weight: 700; color: #4c1d95; }
   h2 { font-size: 10pt; margin: 6px 0 3px; padding-bottom: 2px; border-bottom: 1px solid #999; }
   h2 .cnt { font-weight: 400; font-size: 8.5pt; color: #555; margin-left: 6px; }
   .muted { color: #555; } p.muted { margin: 2px 0; }
@@ -582,6 +697,7 @@ ${input.autoPrint ? `<div class="bar"><span>${esc(c.printBar)}</span><button onc
     <div class="ttl">${esc(c.title)}</div>
     <div class="who"><b>${esc(displayName)}</b><br>${esc(c.issued)} ${esc(kstDate(generatedAt).replace(/-/g, "."))}</div>
   </header>
+  ${periodLine ? `<p class="period">${esc(periodLine)}</p>` : ""}
 
   ${body}
 
@@ -590,7 +706,7 @@ ${input.autoPrint ? `<div class="bar"><span>${esc(c.printBar)}</span><button onc
       ? ""
       : `<section class="notes-block">
     <h2>${trajSection ? 5 : 4}. ${esc(c.s4)}</h2>
-    ${keyFindingsHtml(keyFindings(rows, sessions, last, lang, emph))}
+    ${keyFindingsHtml(keyFindings(rows, last, ref >= 0, c.refShort[refKey], lang, emph))}
   </section>`
   }
 

@@ -636,3 +636,36 @@ export async function adminListVisits(): Promise<{ visits: AdminVisit[]; patient
     patients: await adminListPatients(),
   };
 }
+
+// ── 항암일 (연구자 입력) ─────────────────────────────────────────────────────────────
+
+/** The patient's 항암일 (YYYY-MM-DD), oldest first. */
+export async function adminListChemoDates(patientCode: string): Promise<string[]> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  if (!code) return [];
+  const rows = await sql`SELECT chemo_date::text AS d FROM chemo_dates WHERE patient_code = ${code} ORDER BY chemo_date`;
+  return rows.map((r) => String(r.d));
+}
+
+export async function adminSetChemoDate(
+  patientCode: string,
+  date: string,
+  present: boolean
+): Promise<{ ok: true; dates: string[] } | { ok: false; error: string }> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  const d = String(date ?? "").trim();
+  if (!code || !/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(`${d}T00:00:00Z`))) {
+    return { ok: false, error: "날짜를 확인해 주세요." };
+  }
+  const [known] = await sql`SELECT 1 FROM participants WHERE patient_code = ${code} LIMIT 1`;
+  if (!known) return { ok: false, error: "알 수 없는 환자입니다." };
+  if (present) {
+    await sql`INSERT INTO chemo_dates (patient_code, chemo_date) VALUES (${code}, ${d}::date) ON CONFLICT DO NOTHING`;
+  } else {
+    await sql`DELETE FROM chemo_dates WHERE patient_code = ${code} AND chemo_date = ${d}::date`;
+  }
+  const rows = await sql`SELECT chemo_date::text AS d FROM chemo_dates WHERE patient_code = ${code} ORDER BY chemo_date`;
+  return { ok: true, dates: rows.map((r) => String(r.d)) };
+}

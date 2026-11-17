@@ -220,3 +220,12 @@ ALTER TABLE participants ADD COLUMN IF NOT EXISTS links_sms_error TEXT;
 -- One-off reminder date for a participant (e.g. a survey week skipped because symptoms were too heavy). The cron
 -- sends the weekly reminder on this date instead of 7 days after the last completed survey, then clears it.
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS next_reminder_on DATE;
+
+-- 항암일 (연구자 입력): 진료용 PDF가 최근 항암 주기만 보여 주는 데 쓴다.
+CREATE TABLE IF NOT EXISTS chemo_dates (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_code TEXT NOT NULL,
+  chemo_date   DATE NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (patient_code, chemo_date)
+);
