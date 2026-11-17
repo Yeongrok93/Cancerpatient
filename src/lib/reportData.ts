@@ -51,8 +51,6 @@ function addDays(date: string, days: number): string {
   return new Date(Date.UTC(y, m - 1, d) + days * 86_400_000).toISOString().slice(0, 10);
 }
 
-/** First hand-out: Baseline … 2주차. */
-const FIRST_REPORT_SURVEYS = 3;
 /** A cycle's hand-out starts this many days before the latest 항암일 (to include the pre-treatment survey). */
 const CYCLE_LEAD_DAYS = 7;
 
@@ -76,7 +74,7 @@ export async function loadReportInput(code: string, opts: LoadReportOptions = {}
     .filter((s) => !s.completed_at || kstYmd(new Date(s.completed_at)) <= asOfDay) as ReportSession[];
 
   // Which surveys the hand-out covers:
-  //  - before any 항암일 is on file (first visit): Baseline … 2주차
+  //  - before any 항암일 is on file (first visit): Baseline … the print date
   //  - otherwise: from 1 week before the latest 항암일 up to the print date. A 항암일 on the print date itself
   //    is the visit the document is for (treatment comes after the doctor reads it), so it does not count yet.
   // 항암일 = researcher-entered dates (chemo_dates) + the 마지막 투여일 patients report in the 증상 설문 (adc_doses).
@@ -100,7 +98,8 @@ export async function loadReportInput(code: string, opts: LoadReportOptions = {}
     sessions = all.filter((s) => s.completed_at && kstYmd(new Date(s.completed_at)) > from);
     period = { mode: "cycle", chemo: lastChemo, chemoDates, asOf: asOfDay };
   } else {
-    sessions = all.slice(0, FIRST_REPORT_SURVEYS);
+    // First visit: Baseline up to the print date (usually Baseline–2주차; a 4-week gap to the first visit adds 3주차).
+    sessions = all;
     period = { mode: "first", chemo: null, chemoDates, asOf: asOfDay };
   }
 

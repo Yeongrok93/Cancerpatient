@@ -9,7 +9,7 @@ import { renderReportHtml } from "@/lib/report";
 //   ?print=1                                → also opens the print dialog on load
 //   ?date=YYYY-MM-DD                        → print that date as 작성일
 //   ?lang=en                                → English version
-//   ?range=all                              → every survey (default: the latest 항암 cycle, or Baseline–2주차
+//   ?range=all                              → every survey (default: the latest 항암 cycle, or everything since Baseline
 //                                             before any 항암일 is on file)
 //   ?sample=1                               → layout preview with made-up notes; only when
 //                                             ALLOW_REPORT_SAMPLE=1 (local use)

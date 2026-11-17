@@ -16,7 +16,7 @@ export type ReportSession = { id: string; completed_at: string | null; week?: nu
 
 /**
  * Which surveys the hand-out covers.
- *  - "first": no 항암일 on file before the print date → Baseline … 2주차
+ *  - "first": no 항암일 on file before the print date → Baseline … the print date
  *  - "cycle": from 1 week before the latest 항암일 (`chemo`) to the print date
  *  - "all":   every survey
  * Comparisons ("Grade가 올라간 증상") are made against the window's first survey, except in "all" mode
@@ -141,7 +141,7 @@ const COPY: Record<ReportLang, Copy> = {
     refFirst: "기간 첫 설문",
     refShort: { prev: "이전", baseline: "Baseline", preChemo: "항암 전", first: "기간 첫 설문" },
     chemoMark: (d) => `항암 ${d}`,
-    periodFirst: (range, n, noChemo) => `첫 진료 요약 · Baseline ~ 2주차 (${range}, ${n}회)${noChemo ? " · 항암일 미입력" : ""}`,
+    periodFirst: (range, n, noChemo) => `첫 진료 요약 · Baseline부터의 설문 ${range} (${n}회)${noChemo ? " · 항암일 미입력" : ""}`,
     periodCycle: (chemo, range, n) => `최근 항암 ${chemo} · 항암 1주 전부터의 설문 ${range} (${n}회)`,
     periodAll: (range, n) => `전체 설문 ${range} (${n}회)`,
     s3: "3. 증상 부담 추이",
@@ -182,7 +182,7 @@ const COPY: Record<ReportLang, Copy> = {
     refShort: { prev: "previous", baseline: "baseline", preChemo: "pre-treatment", first: "first of period" },
     chemoMark: (d) => `Treatment ${d}`,
     periodFirst: (range, n, noChemo) =>
-      `First visit summary · Baseline – Week 2 (${range}, ${n} surveys)${noChemo ? " · no treatment date on file" : ""}`,
+      `First visit summary · surveys since baseline ${range} (${n})${noChemo ? " · no treatment date on file" : ""}`,
     periodCycle: (chemo, range, n) => `Latest treatment ${chemo} · surveys from 1 week before: ${range} (${n})`,
     periodAll: (range, n) => `All surveys ${range} (${n})`,
     s3: "3. Symptom Burden Trend",
