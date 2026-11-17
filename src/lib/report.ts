@@ -99,9 +99,6 @@ type Copy = {
   refFirst: string;
   refShort: { prev: string; baseline: string; preChemo: string; first: string };
   chemoMark: (d: string) => string;
-  periodFirst: (range: string, n: number, noChemo: boolean) => string;
-  periodCycle: (chemo: string, range: string, n: number) => string;
-  periodAll: (range: string, n: number) => string;
   s3: string;
   s3sub: string;
   sTraj: string;
@@ -141,13 +138,10 @@ const COPY: Record<ReportLang, Copy> = {
     refFirst: "기간 첫 설문",
     refShort: { prev: "이전", baseline: "Baseline", preChemo: "항암 전", first: "기간 첫 설문" },
     chemoMark: (d) => `항암 ${d}`,
-    periodFirst: (range, n, noChemo) => `첫 진료 요약 · Baseline부터의 설문 ${range} (${n}회)${noChemo ? " · 항암일 미입력" : ""}`,
-    periodCycle: (chemo, range, n) => `최근 항암 ${chemo} · 항암 1주 전부터의 설문 ${range} (${n}회)`,
-    periodAll: (range, n) => `전체 설문 ${range} (${n}회)`,
     s3: "3. 증상 부담 추이",
     s3sub: "설문별 Grade별 증상 수",
     sTraj: "4. 증상별 변화",
-    sTrajSub: "현재 Grade 3이 아닌 증상 중 Grade 2 이상이었거나 변화가 있었던 것 (설문 순서대로)",
+    sTrajSub: "현재 Grade 3이 아닌 증상 중 Grade 2 이상이었거나 변화가 있었던 것",
     s3recent: (n) => ` · 최근 ${n}회`,
     s4: "PRO-CTCAE 증상부담 요약",
     noSessions: "완료된 증상 설문이 없습니다.",
@@ -181,14 +175,10 @@ const COPY: Record<ReportLang, Copy> = {
     refFirst: "First Survey of the Period",
     refShort: { prev: "previous", baseline: "baseline", preChemo: "pre-treatment", first: "first of period" },
     chemoMark: (d) => `Treatment ${d}`,
-    periodFirst: (range, n, noChemo) =>
-      `First visit summary · surveys since baseline ${range} (${n})${noChemo ? " · no treatment date on file" : ""}`,
-    periodCycle: (chemo, range, n) => `Latest treatment ${chemo} · surveys from 1 week before: ${range} (${n})`,
-    periodAll: (range, n) => `All surveys ${range} (${n})`,
     s3: "3. Symptom Burden Trend",
     s3sub: "Number of symptoms at each grade, by survey",
     sTraj: "4. Symptom Trajectories",
-    sTrajSub: "Symptoms not at Grade 3 now that reached Grade 2+ or changed (in survey order)",
+    sTrajSub: "Symptoms not at Grade 3 now that reached Grade 2+ or changed",
     s3recent: (n) => ` · last ${n} surveys`,
     s4: "PRO-CTCAE Symptom Burden Summary",
     noSessions: "No completed symptom survey.",
@@ -526,14 +516,6 @@ export function renderReportHtml(input: ReportInput): string {
   const prevLabel = ref >= 0 ? `${weekName(sessions, ref, c)} (${mmdd(sessions[ref].completed_at)})` : null;
   const markers = chemoMarkers(sessions, period?.chemoDates ?? [], period?.asOf ?? kstDate(generatedAt));
 
-  const range = sessions.length === 0 ? "" : `${mmdd(sessions[0].completed_at)} – ${mmdd(sessions[last].completed_at)}`;
-  const periodLine = !period
-    ? ""
-    : period.mode === "cycle" && period.chemo
-      ? c.periodCycle(period.chemo.replace(/-/g, "."), range, sessions.length)
-      : period.mode === "first"
-        ? c.periodFirst(range, sessions.length, period.chemoDates.length === 0)
-        : c.periodAll(range, sessions.length);
 
   const rows = series.map((it) => {
     const cur = last >= 0 ? it.grades[last] : null;
@@ -649,7 +631,6 @@ export function renderReportHtml(input: ReportInput): string {
   header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; border-bottom: 2px solid #111; padding-bottom: 5px; margin-bottom: 8px; }
   header .ttl { font-size: 14.5pt; font-weight: 700; letter-spacing: -0.2px; line-height: 1.2; }
   header .who { text-align: right; font-size: 9pt; white-space: nowrap; } header .who b { font-size: 11pt; }
-  .period { margin: -3px 0 4px; font-size: 9pt; font-weight: 700; color: #4c1d95; }
   h2 { font-size: 10pt; margin: 6px 0 3px; padding-bottom: 2px; border-bottom: 1px solid #999; }
   h2 .cnt { font-weight: 400; font-size: 8.5pt; color: #555; margin-left: 6px; }
   .muted { color: #555; } p.muted { margin: 2px 0; }
@@ -697,7 +678,6 @@ ${input.autoPrint ? `<div class="bar"><span>${esc(c.printBar)}</span><button onc
     <div class="ttl">${esc(c.title)}</div>
     <div class="who"><b>${esc(displayName)}</b><br>${esc(c.issued)} ${esc(kstDate(generatedAt).replace(/-/g, "."))}</div>
   </header>
-  ${periodLine ? `<p class="period">${esc(periodLine)}</p>` : ""}
 
   ${body}
 
