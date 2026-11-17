@@ -301,7 +301,7 @@ export default function AdminPage() {
                         ) : p.sms_notified === false ? (
                           <span className="text-red-600 font-medium" title={p.sms_error ?? ""}>발송 실패</span>
                         ) : (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-gray-400" title={p.sms_error ?? ""}>—</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-xs whitespace-nowrap space-y-1">

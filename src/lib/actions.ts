@@ -138,6 +138,17 @@ export async function registerParticipant(input: {
     return { ok: false, error: "신청 횟수가 너무 많습니다. 잠시 후 다시 시도해 주세요." };
   }
 
+  // The same person often submits the form more than once in a few minutes. Every submission is still
+  // saved, but only the first one in 24 hours (per phone number) alerts the research team.
+  const phoneDigits = contact.replace(/\D/g, "");
+  const [duplicate] = phoneDigits
+    ? await sql`
+        SELECT 1 FROM participants
+        WHERE regexp_replace(contact, '\\D', '', 'g') = ${phoneDigits} AND applied_at > NOW() - INTERVAL '24 hours'
+        LIMIT 1
+      `
+    : [];
+
   const [row] = await sql`
     INSERT INTO participants (name, record_or_birth, contact, research_types, consent_agreed, gender)
     VALUES (${name}, ${recordOrBirth}, ${contact}, ${researchTypes.join(",")}, TRUE, ${gender})
@@ -151,14 +162,19 @@ export async function registerParticipant(input: {
   // SMS (not LMS) tops out around 45 Korean characters / 90 bytes, so this
   // packs everything into one slash-separated line.
   const text = `[연구참여신청] ${[name, recordOrBirth, researchTypes.join(","), contact].join("/")}`;
-  try {
-    const { sender, recipients } = await smsConfig();
-    await sendSms({ to: recipients, from: sender, text });
-    await sql`UPDATE participants SET sms_notified = TRUE, sms_error = NULL WHERE id = ${row.id}`;
-  } catch (err) {
-    console.error("Failed to send registration SMS:", err);
-    const message = err instanceof Error ? err.message.slice(0, 500) : "unknown error";
-    await sql`UPDATE participants SET sms_notified = FALSE, sms_error = ${message} WHERE id = ${row.id}`;
+  if (duplicate) {
+    // Not a failure: sms_notified stays NULL ("—" in the admin tab) and the reason is kept for the tooltip.
+    await sql`UPDATE participants SET sms_error = '24시간 안에 같은 번호로 신청이 있어 연구팀 알림을 보내지 않았어요' WHERE id = ${row.id}`;
+  } else {
+    try {
+      const { sender, recipients } = await smsConfig();
+      await sendSms({ to: recipients, from: sender, text });
+      await sql`UPDATE participants SET sms_notified = TRUE, sms_error = NULL WHERE id = ${row.id}`;
+    } catch (err) {
+      console.error("Failed to send registration SMS:", err);
+      const message = err instanceof Error ? err.message.slice(0, 500) : "unknown error";
+      await sql`UPDATE participants SET sms_notified = FALSE, sms_error = ${message} WHERE id = ${row.id}`;
+    }
   }
 
   // Schedule the applicant's follow-up text. Best effort: it never fails the registration.
