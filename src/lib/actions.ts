@@ -48,19 +48,29 @@ async function callerIp(): Promise<string> {
 
 // ── 본인확인 / 참여신청 ─────────────────────────────────────────────
 
-/** Exact name + birth-date match → that participant's code, never any other column. */
-export async function findPatientCode(name: string, birth: string): Promise<string | null> {
-  if (typeof name !== "string" || typeof birth !== "string" || !name.trim() || !birth.trim()) return null;
+/**
+ * Exact name + birth-date match, never any other column:
+ *  - found:   has a participant code → the survey can start
+ *  - pending: applied, but the research team has not given a code yet. Told apart from "none" so that
+ *             someone who just applied is not shown "참여자를 찾을 수 없습니다" and applies again.
+ *  - none:    no match (or too many lookups)
+ */
+export type PatientLookup = { status: "found"; code: string } | { status: "pending" } | { status: "none" };
+
+export async function lookupPatient(name: string, birth: string): Promise<PatientLookup> {
+  if (typeof name !== "string" || typeof birth !== "string" || !name.trim() || !birth.trim()) return { status: "none" };
   // Slows guessing name/birth-date pairs: 15 lookups per 10 minutes per IP.
-  if (!rateLimit(`find-code:${await callerIp()}`, 15, 10 * 60 * 1000)) return null;
+  if (!rateLimit(`find-code:${await callerIp()}`, 15, 10 * 60 * 1000)) return { status: "none" };
   const rows = await sql`
     SELECT patient_code FROM participants
     WHERE trim(name) = trim(${name})
-      AND regexp_replace(record_or_birth, '\\D', '', 'g') = regexp_replace(${birth}, '\\D', '', 'g')
-      AND patient_code IS NOT NULL
+      AND regexp_replace(record_or_birth, '[^0-9]', '', 'g') = regexp_replace(${birth}, '[^0-9]', '', 'g')
+    ORDER BY (patient_code IS NULL), applied_at
     LIMIT 1
   `;
-  return rows[0]?.patient_code ?? null;
+  if (rows.length === 0) return { status: "none" };
+  const code = rows[0].patient_code;
+  return code && String(code).trim() ? { status: "found", code: String(code) } : { status: "pending" };
 }
 
 async function patientExists(code: string) {
@@ -88,7 +98,7 @@ async function sendApplicantConfirmation(participantId: string, contact: string)
   } else {
     const [recent] = await sql`
       SELECT 1 FROM participants
-      WHERE regexp_replace(contact, '\\D', '', 'g') = ${phone}
+      WHERE regexp_replace(contact, '[^0-9]', '', 'g') = ${phone}
         AND id <> ${participantId} AND applied_at > NOW() - INTERVAL '24 hours'
       LIMIT 1
     `;
@@ -144,7 +154,7 @@ export async function registerParticipant(input: {
   const [duplicate] = phoneDigits
     ? await sql`
         SELECT 1 FROM participants
-        WHERE regexp_replace(contact, '\\D', '', 'g') = ${phoneDigits} AND applied_at > NOW() - INTERVAL '24 hours'
+        WHERE regexp_replace(contact, '[^0-9]', '', 'g') = ${phoneDigits} AND applied_at > NOW() - INTERVAL '24 hours'
         LIMIT 1
       `
     : [];

@@ -69,18 +69,19 @@ export default function RegisterPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-3">
             <h1 className="text-lg font-bold text-gray-900">신청이 완료되었습니다</h1>
+            <p className="text-sm text-gray-900 font-bold leading-relaxed bg-primary-50 border border-primary-200 rounded-xl px-3 py-3">
+              다시 신청하지 않으셔도 됩니다.<br />
+              연구팀이 확인 후 문자로 안내해 드립니다.
+            </p>
             <p className="text-sm text-gray-500 leading-relaxed">
-              연구팀에서 신청 내용을 확인한 후 참여를 확정해 드립니다.<br />
-              확정 안내를 받으신 후 첫 화면에서 이름과 생년월일로 설문을 시작해 주세요.
+              참여가 확정되면 설문 링크를 문자로 보내 드립니다.<br />
+              그 전에는 설문을 시작할 수 없으니, 안내 문자를 기다려 주세요.
             </p>
           </div>
-          <a
-            href="/"
-            className="block w-full py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-          >
-            처음으로 돌아가기
+          <a href="/" className="block text-xs text-gray-400 underline underline-offset-2 hover:text-gray-600">
+            첫 화면으로
           </a>
         </div>
       </div>

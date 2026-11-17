@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { findPatientCode } from "@/lib/actions";
+import { lookupPatient } from "@/lib/actions";
 
 export default function StartPage() {
   const router = useRouter();
@@ -10,6 +10,8 @@ export default function StartPage() {
   const [birth, setBirth] = useState("");
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState("");
+  // Applied, but the research team has not confirmed yet: not an error, and no need to apply again.
+  const [pending, setPending] = useState(false);
 
   async function handleStart(e: React.FormEvent) {
     e.preventDefault();
@@ -17,16 +19,22 @@ export default function StartPage() {
 
     setChecking(true);
     setError("");
+    setPending(false);
     try {
-      const patientCode = await findPatientCode(name.trim(), birth);
+      const found = await lookupPatient(name.trim(), birth);
 
-      if (!patientCode) {
+      if (found.status === "pending") {
+        setPending(true);
+        setChecking(false);
+        return;
+      }
+      if (found.status === "none") {
         setError("입력하신 정보와 일치하는 참여자를 찾을 수 없습니다. 이름·생년월일을 다시 확인해 주세요.");
         setChecking(false);
         return;
       }
 
-      router.push(`/select?code=${encodeURIComponent(patientCode)}`);
+      router.push(`/select?code=${encodeURIComponent(found.code)}`);
     } catch (err) {
       console.error(err);
       setError("확인 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
@@ -130,6 +138,13 @@ export default function StartPage() {
 
         {error && (
           <p className="text-xs text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2 leading-relaxed">{error}</p>
+        )}
+
+        {pending && (
+          <div className="text-sm text-primary-900 bg-primary-50 border border-primary-200 rounded-lg px-3 py-3 leading-relaxed space-y-1">
+            <p className="font-bold">참여신청은 잘 접수되었습니다.</p>
+            <p>연구팀에서 확인 후 문자로 설문 링크를 보내 드립니다. 다시 신청하지 않으셔도 됩니다.</p>
+          </div>
         )}
 
         <button
