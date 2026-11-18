@@ -54,7 +54,7 @@ export type ReportInput = {
   dataId?: string;
   /** Adds a screen-only "print" bar and opens the print dialog on load. */
   autoPrint?: boolean;
-  /** Researcher-written line printed under the title, bold + underlined (e.g. a survey week skipped because of symptom burden). */
+  /** Researcher-written line printed first in the summary, bold + underlined (e.g. a survey week skipped because of symptom burden). */
   comment?: string | null;
   /** Survey window (see ReportPeriod). Without it the document behaves as "all". */
   period?: ReportPeriod;
@@ -143,7 +143,7 @@ const COPY: Record<ReportLang, Copy> = {
     refShort: { prev: "이전", baseline: "Baseline", preChemo: "항암 전", first: "기간 첫 설문" },
     chemoMark: (d) => `항암 ${d}`,
     missedRow: (d) => `미작성 (${d})`,
-    missedBar: "N/A · 설문 미작성으로 증상부담 측정 안 됨",
+    missedBar: "N/A · 증상부담이 심해 설문 작성 참여하지 못함",
     s3: "3. 증상 부담 추이",
     s3sub: "설문별 Grade별 증상 수",
     sTraj: "4. 증상별 변화",
@@ -529,8 +529,9 @@ function keyFindings(rows: KeyRow[], last: number, hasRef: boolean, refWord: str
   return out;
 }
 
-function keyFindingsHtml(lines: string[]): string {
-  return `<ul class="notes">${lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`;
+function keyFindingsHtml(lines: string[], comment?: string | null): string {
+  const first = comment?.trim() ? `<li class="cmt">※ ${esc(comment.trim())}</li>` : "";
+  return `<ul class="notes">${first}${lines.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`;
 }
 
 // ── the document ────────────────────────────────────────────────────────
@@ -697,7 +698,7 @@ export function renderReportHtml(input: ReportInput): string {
   .gb.sm { min-width: 14px; height: 14px; line-height: 12px; font-size: 7.5pt; margin-right: 3px; }
   .gb-na { border-color: #bbb; color: #999; font-weight: 400; }
   .gb-miss { border: 1px dashed #6b7280; background: #f3f4f6; color: #374151; font-size: 6.5pt; min-width: 22px; }
-  .cmt { margin: 0 0 5px; font-size: 10pt; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+  .cmt { font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
   .spark { flex: none; }
   .cols3 { column-count: 3; column-gap: 5mm; }
   .cols3 .ch { font-size: 8pt; }
@@ -724,7 +725,6 @@ ${input.autoPrint ? `<div class="bar"><span>${esc(c.printBar)}</span><button onc
     <div class="ttl">${esc(c.title)}</div>
     <div class="who"><b>${esc(displayName)}</b><br>${esc(c.issued)} ${esc(kstDate(generatedAt).replace(/-/g, "."))}</div>
   </header>
-  ${input.comment?.trim() ? `<p class="cmt">※ ${esc(input.comment.trim())}</p>` : ""}
 
   ${body}
 
@@ -733,7 +733,7 @@ ${input.autoPrint ? `<div class="bar"><span>${esc(c.printBar)}</span><button onc
       ? ""
       : `<section class="notes-block">
     <h2>${trajSection ? 5 : 4}. ${esc(c.s4)}</h2>
-    ${keyFindingsHtml(keyFindings(rows, last, ref >= 0, c.refShort[refKey], lang, emph))}
+    ${keyFindingsHtml(keyFindings(rows, last, ref >= 0, c.refShort[refKey], lang, emph), input.comment)}
   </section>`
   }
 
