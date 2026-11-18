@@ -81,7 +81,8 @@ async function patientExists(code: string) {
 
 // The applicant's only automatic text: sent 5 minutes after applying, from the researcher, asking for the
 // next hospital visit date. Scheduled with Solapi (예약발송), so nothing here has to wait.
-// Skips invalid numbers, and a number that already applied in the last 24 hours, so the
+// Skips invalid numbers, a number that already belongs to a coded/enrolled participant, and a number that
+// already applied in the last 24 hours, so the
 // public form can't be used to text arbitrary people repeatedly. The outcome is stored on the
 // participant row and shown in the admin 참여신청 tab.
 async function sendApplicantConfirmation(participantId: string, contact: string) {
@@ -96,13 +97,24 @@ async function sendApplicantConfirmation(participantId: string, contact: string)
     status = "failed";
     error = "SMS_SENDER 환경변수가 설정되지 않았습니다.";
   } else {
-    const [recent] = await sql`
+    // Already a participant (번호 배정 or 등록) under this number → never re-send, whenever they re-apply.
+    const [existing] = await sql`
       SELECT 1 FROM participants
       WHERE regexp_replace(contact, '[^0-9]', '', 'g') = ${phone}
-        AND id <> ${participantId} AND applied_at > NOW() - INTERVAL '24 hours'
+        AND id <> ${participantId} AND (patient_code IS NOT NULL OR enrolled = TRUE)
       LIMIT 1
     `;
-    if (recent) {
+    const [recent] = existing
+      ? [undefined]
+      : await sql`
+          SELECT 1 FROM participants
+          WHERE regexp_replace(contact, '[^0-9]', '', 'g') = ${phone}
+            AND id <> ${participantId} AND applied_at > NOW() - INTERVAL '24 hours'
+          LIMIT 1
+        `;
+    if (existing) {
+      error = "이미 등록된 참여자의 번호라 보내지 않았어요";
+    } else if (recent) {
       error = "24시간 안에 같은 번호로 신청이 있어 보내지 않았어요";
     } else {
       at = new Date(Date.now() + 5 * 60_000);
