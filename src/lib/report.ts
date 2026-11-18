@@ -54,7 +54,7 @@ export type ReportInput = {
   dataId?: string;
   /** Adds a screen-only "print" bar and opens the print dialog on load. */
   autoPrint?: boolean;
-  /** Researcher-written line printed last in the summary (e.g. a survey week skipped because of symptom burden). */
+  /** Researcher-written line printed under the title, bold + underlined (e.g. a survey week skipped because of symptom burden). */
   comment?: string | null;
   /** Survey window (see ReportPeriod). Without it the document behaves as "all". */
   period?: ReportPeriod;
@@ -101,6 +101,8 @@ type Copy = {
   refFirst: string;
   refShort: { prev: string; baseline: string; preChemo: string; first: string };
   chemoMark: (d: string) => string;
+  missedRow: (d: string) => string;
+  missedBar: string;
   s3: string;
   s3sub: string;
   sTraj: string;
@@ -140,6 +142,8 @@ const COPY: Record<ReportLang, Copy> = {
     refFirst: "기간 첫 설문",
     refShort: { prev: "이전", baseline: "Baseline", preChemo: "항암 전", first: "기간 첫 설문" },
     chemoMark: (d) => `항암 ${d}`,
+    missedRow: (d) => `미작성 (${d})`,
+    missedBar: "N/A · 설문 미작성으로 증상부담 측정 안 됨",
     s3: "3. 증상 부담 추이",
     s3sub: "설문별 Grade별 증상 수",
     sTraj: "4. 증상별 변화",
@@ -177,6 +181,8 @@ const COPY: Record<ReportLang, Copy> = {
     refFirst: "First Survey of the Period",
     refShort: { prev: "previous", baseline: "baseline", preChemo: "pre-treatment", first: "first of period" },
     chemoMark: (d) => `Treatment ${d}`,
+    missedRow: (d) => `Not done (${d})`,
+    missedBar: "N/A · survey not done, symptom burden not measured",
     s3: "3. Symptom Burden Trend",
     s3sub: "Number of symptoms at each grade, by survey",
     sTraj: "4. Symptom Trajectories",
@@ -232,21 +238,44 @@ function weekName(sessions: ReportSession[], i: number, c: Copy): string {
 
 const sessionDay = (s: ReportSession) => (s.completed_at ? kstDate(new Date(s.completed_at)) : "");
 
+function addDays(date: string, days: number): string {
+  const [y, m, d] = date.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d) + days * 86_400_000).toISOString().slice(0, 10);
+}
+
+const dayGap = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+
+/** Something that happened between two printed surveys: a 항암일, or a weekly survey that was never done. */
+export type TimelineEvent = { kind: "chemo" | "missed"; date: string };
+
 /**
- * 항암일 placed between the printed surveys: for each survey, the 항암일 that fall after the previous survey's day
- * and before this survey's day (a survey on the 항암일 itself counts as before treatment). `tail` = after the last.
+ * Events placed between the printed surveys. `before[i]` = events after survey i-1 and before survey i, oldest first;
+ * `tail` = after the last survey (up to the print date).
+ *  - 항암일: a survey on the 항암일 itself counts as before treatment; 항암일 on/after the print date or on/before the
+ *    first printed survey are left out.
+ *  - Missed weeks: surveys are weekly, so a gap of about 2 weeks between two surveys (or from the last survey to the
+ *    print date) means one survey week was skipped — shown as N/A rather than silently left out.
  */
-function chemoMarkers(sessions: ReportSession[], chemoDates: string[], asOf: string): { before: string[][]; tail: string[] } {
+function timelineEvents(sessions: ReportSession[], chemoDates: string[], asOf: string): { before: TimelineEvent[][]; tail: TimelineEvent[] } {
   const days = sessions.map(sessionDay);
-  const before: string[][] = sessions.map(() => []);
-  const tail: string[] = [];
+  const before: TimelineEvent[][] = sessions.map(() => []);
+  const tail: TimelineEvent[] = [];
   if (days.length === 0) return { before, tail };
   for (const d of chemoDates) {
-    if (d >= asOf || d <= days[0]) continue; // not yet given / before the first printed survey (shown in the header)
+    if (d >= asOf || d <= days[0]) continue;
     const i = days.findIndex((day) => day > d);
-    if (i === -1) tail.push(d);
-    else before[i].push(d);
+    (i === -1 ? tail : before[i]).push({ kind: "chemo", date: d });
   }
+  const missed = (from: string, to: string, into: TimelineEvent[]) => {
+    if (!from || !to) return;
+    const n = Math.round(dayGap(from, to) / 7) - 1;
+    for (let k = 1; k <= n; k++) into.push({ kind: "missed", date: addDays(from, 7 * k) });
+  };
+  for (let i = 1; i < days.length; i++) missed(days[i - 1], days[i], before[i]);
+  missed(days[days.length - 1], asOf, tail);
+  const byDate = (a: TimelineEvent, b: TimelineEvent) => a.date.localeCompare(b.date) || (a.kind === "chemo" ? -1 : 1);
+  before.forEach((list) => list.sort(byDate));
+  tail.sort(byDate);
   return { before, tail };
 }
 
@@ -287,6 +316,8 @@ const FILL: Record<number, { bg: string; fg: string }> = {
   3: { bg: "#dc2626", fg: "#ffffff" },
 };
 
+const missedBox = () => `<span class="gb gb-miss">N/A</span>`;
+
 function gradeBox(g: number | null): string {
   if (g === null) return `<span class="gb gb-na">–</span>`;
   const { bg, fg } = FILL[g];
@@ -317,7 +348,7 @@ function distributionChart(
   series: ItemSeries[],
   sessions: ReportSession[],
   c: Copy,
-  markers: { before: string[][]; tail: string[] }
+  markers: { before: TimelineEvent[][]; tail: TimelineEvent[] }
 ): string {
   const first = Math.max(0, sessions.length - MAX_TREND_ROWS);
   const shown = sessions.map((s, i) => ({ s, i })).slice(first);
@@ -331,25 +362,32 @@ function distributionChart(
     return { label: `${weekName(sessions, i, c)} (${mmdd(s.completed_at)})`, counts, total: counts.reduce((a, b) => a + b, 0), marks: markers.before[i] };
   });
   const maxTotal = Math.max(1, ...rows.map((r) => r.total));
-  // Layout: each 항암일 is a dashed line above the first survey after it.
+  // Layout: each 항암일 is a dashed line above the first survey after it; a skipped week is its own N/A row.
   let y = 2;
   const markLine = (d: string, yy: number) =>
     `<line x1="${labelW - 2}" x2="${labelW + barW}" y1="${yy + 6}" y2="${yy + 6}" stroke="#6d28d9" stroke-width="1" stroke-dasharray="3 2"/>` +
     `<text x="${labelW - 6}" y="${yy + 9}" text-anchor="end" font-size="9" font-weight="700" fill="#6d28d9">▼ ${esc(c.chemoMark(dot(d)))}</text>`;
+  const missedRow = (d: string, yy: number) =>
+    `<text x="${labelW - 6}" y="${yy + 9.5}" text-anchor="end" font-size="9.5" fill="#555">${esc(c.missedRow(dot(d)))}</text>` +
+    `<rect x="${labelW}" y="${yy}" width="${barW}" height="${barH}" fill="#f3f4f6" stroke="#9ca3af" stroke-width="0.8" stroke-dasharray="3 2"/>` +
+    `<text x="${labelW + barW / 2}" y="${yy + 9.5}" text-anchor="middle" font-size="9" font-weight="700" fill="#4b5563">${esc(c.missedBar)}</text>`;
   const parts: string[] = [];
-  const tops = rows.map((r) => {
-    for (const d of r.marks) {
-      parts.push(markLine(d, y));
+  const event = (e: TimelineEvent) => {
+    if (e.kind === "chemo") {
+      parts.push(markLine(e.date, y));
       y += markH;
+    } else {
+      parts.push(missedRow(e.date, y));
+      y += rowH;
     }
+  };
+  const tops = rows.map((r) => {
+    r.marks.forEach(event);
     const top = y;
     y += rowH;
     return top;
   });
-  for (const d of markers.tail) {
-    parts.push(markLine(d, y));
-    y += markH;
-  }
+  markers.tail.forEach(event);
   const height = y;
   const bars = rows
     .map((r, i) => {
@@ -516,7 +554,7 @@ export function renderReportHtml(input: ReportInput): string {
     mode === "all" ? "prev" : mode === "first" && sessions[0]?.week === 0 ? "baseline" : preChemo ? "preChemo" : mode === "cycle" ? "first" : "prev";
   const refName = { prev: c.refPrev, baseline: c.refBaseline, preChemo: c.refPreChemo, first: c.refFirst }[refKey];
   const prevLabel = ref >= 0 ? `${weekName(sessions, ref, c)} (${mmdd(sessions[ref].completed_at)})` : null;
-  const markers = chemoMarkers(sessions, period?.chemoDates ?? [], period?.asOf ?? kstDate(generatedAt));
+  const markers = timelineEvents(sessions, period?.chemoDates ?? [], period?.asOf ?? kstDate(generatedAt));
 
 
   const rows = series.map((it) => {
@@ -583,7 +621,10 @@ export function renderReportHtml(input: ReportInput): string {
       .sort((x, y) => y.lastG - x.lastG || y.maxG - x.maxG || x.it.item.id - y.it.item.id);
     if (list.length === 0) return "";
     const chip = (r: (typeof list)[number]) => {
-      const boxes = r.it.grades.map((g) => gradeBox(g)).join(`<span class="ar">→</span>`);
+      const boxes = r.it.grades
+        .flatMap((g, i) => [...markers.before[i].filter((e) => e.kind === "missed").map(missedBox), gradeBox(g)])
+        .concat(markers.tail.filter((e) => e.kind === "missed").map(missedBox))
+        .join(`<span class="ar">→</span>`);
       const dir = r.lastG > (r.it.grades[0] ?? 0) ? "▲" : r.lastG < (r.it.grades[0] ?? 0) ? "▼" : "";
       return `<div class="tj"><div class="gg">${boxes}</div><b>${esc(termParts(r.it.item, lang).main)}</b>${emph.has(r.it.item.id) ? `<span class="star">★</span>` : ""}${dir ? `<span class="dir">${dir}</span>` : ""}</div>`;
     };
@@ -591,9 +632,10 @@ export function renderReportHtml(input: ReportInput): string {
       const inCat = list.filter((r) => r.it.item.category === category);
       return inCat.length === 0 ? "" : `<div class="cb"><div class="ch">${esc(categoryLabel(category, lang))}</div>${inCat.map(chip).join("")}</div>`;
     }).join("");
+    const ev = (e: TimelineEvent) => (e.kind === "chemo" ? `▼${c.chemoMark(dot(e.date))}` : `N/A ${c.missedRow(dot(e.date))}`);
     const heads = sessions
-      .map((x, i) => [...markers.before[i].map((d) => `▼${c.chemoMark(dot(d))}`), `${weekName(sessions, i, c)} ${mmdd(x.completed_at)}`].join(" → "))
-      .concat(markers.tail.map((d) => `▼${c.chemoMark(dot(d))}`))
+      .map((x, i) => [...markers.before[i].map(ev), `${weekName(sessions, i, c)} ${mmdd(x.completed_at)}`].join(" → "))
+      .concat(markers.tail.map(ev))
       .join(" → ");
     return `<h2>${esc(c.sTraj)} <span class="cnt">${esc(c.sTrajSub)}</span></h2><p class="muted" style="margin:2px 0 4px;font-size:8pt">${esc(heads)}</p><div class="cols cols3">${blocks}</div>`;
   };
@@ -654,6 +696,8 @@ export function renderReportHtml(input: ReportInput): string {
   .gb { display: inline-block; min-width: 17px; height: 17px; line-height: 15px; text-align: center; border: 1px solid #111; font-weight: 700; font-size: 8.5pt; }
   .gb.sm { min-width: 14px; height: 14px; line-height: 12px; font-size: 7.5pt; margin-right: 3px; }
   .gb-na { border-color: #bbb; color: #999; font-weight: 400; }
+  .gb-miss { border: 1px dashed #6b7280; background: #f3f4f6; color: #374151; font-size: 6.5pt; min-width: 22px; }
+  .cmt { margin: 0 0 5px; font-size: 10pt; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
   .spark { flex: none; }
   .cols3 { column-count: 3; column-gap: 5mm; }
   .cols3 .ch { font-size: 8pt; }
@@ -680,6 +724,7 @@ ${input.autoPrint ? `<div class="bar"><span>${esc(c.printBar)}</span><button onc
     <div class="ttl">${esc(c.title)}</div>
     <div class="who"><b>${esc(displayName)}</b><br>${esc(c.issued)} ${esc(kstDate(generatedAt).replace(/-/g, "."))}</div>
   </header>
+  ${input.comment?.trim() ? `<p class="cmt">※ ${esc(input.comment.trim())}</p>` : ""}
 
   ${body}
 
@@ -688,7 +733,7 @@ ${input.autoPrint ? `<div class="bar"><span>${esc(c.printBar)}</span><button onc
       ? ""
       : `<section class="notes-block">
     <h2>${trajSection ? 5 : 4}. ${esc(c.s4)}</h2>
-    ${keyFindingsHtml([...keyFindings(rows, last, ref >= 0, c.refShort[refKey], lang, emph), ...(input.comment?.trim() ? [`※ ${input.comment.trim()}`] : [])])}
+    ${keyFindingsHtml(keyFindings(rows, last, ref >= 0, c.refShort[refKey], lang, emph))}
   </section>`
   }
 
