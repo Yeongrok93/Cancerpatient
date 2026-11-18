@@ -120,6 +120,8 @@ export async function loadReportInput(code: string, opts: LoadReportOptions = {}
   `;
   const notesText = noteRows.map((n) => String(n.body)).join("\n");
   const notes: NotesSummary = { kind: "none" };
+  const [ci] = await sql`SELECT report_comment FROM clinical_info WHERE patient_code = ${code}`;
+  const comment = ci?.report_comment ? String(ci.report_comment) : "";
 
   const sex = parseSex(person.gender);
   return {
@@ -132,8 +134,9 @@ export async function loadReportInput(code: string, opts: LoadReportOptions = {}
     notes,
     notesText,
     period,
+    comment,
     generatedAt: opts.asOf,
     autoPrint: opts.autoPrint,
-    dataId: dataId(code, lang, sex, sessions, answers, notesText + `|${period.mode}|${chemoDates.join(",")}`),
+    dataId: dataId(code, lang, sex, sessions, answers, notesText + `|${period.mode}|${chemoDates.join(",")}|${comment}`),
   };
 }

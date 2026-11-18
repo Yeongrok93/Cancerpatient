@@ -229,3 +229,6 @@ CREATE TABLE IF NOT EXISTS chemo_dates (
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (patient_code, chemo_date)
 );
+
+-- 진료용 PDF 코멘트 (연구자 입력): printed as the last line of the summary (e.g. a survey week skipped because of symptom burden).
+ALTER TABLE clinical_info ADD COLUMN IF NOT EXISTS report_comment TEXT;

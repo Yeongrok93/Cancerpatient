@@ -669,3 +669,31 @@ export async function adminSetChemoDate(
   const rows = await sql`SELECT chemo_date::text AS d FROM chemo_dates WHERE patient_code = ${code} ORDER BY chemo_date`;
   return { ok: true, dates: rows.map((r) => String(r.d)) };
 }
+
+// ── 진료용 PDF 코멘트 (연구자 입력) ─────────────────────────────────────────────────────
+
+export async function adminGetReportComment(patientCode: string): Promise<string> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  if (!code) return "";
+  const [r] = await sql`SELECT report_comment FROM clinical_info WHERE patient_code = ${code}`;
+  return r?.report_comment ? String(r.report_comment) : "";
+}
+
+export async function adminSaveReportComment(
+  patientCode: string,
+  comment: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  const text = String(comment ?? "").trim();
+  if (!code) return { ok: false, error: "잘못된 요청입니다." };
+  if (text.length > 300) return { ok: false, error: "300자 이내로 적어 주세요." };
+  const [known] = await sql`SELECT 1 FROM participants WHERE patient_code = ${code} LIMIT 1`;
+  if (!known) return { ok: false, error: "알 수 없는 환자입니다." };
+  await sql`
+    INSERT INTO clinical_info (patient_code, report_comment, updated_at) VALUES (${code}, ${text || null}, NOW())
+    ON CONFLICT (patient_code) DO UPDATE SET report_comment = EXCLUDED.report_comment, updated_at = NOW()
+  `;
+  return { ok: true };
+}

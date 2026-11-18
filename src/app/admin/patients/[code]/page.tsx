@@ -22,6 +22,7 @@ import ResearcherNotes, { sortNotes } from "./ResearcherNotes";
 import QlqEditor from "./QlqEditor";
 import PatientInfoEditor from "./PatientInfoEditor";
 import ChemoDates from "./ChemoDates";
+import ReportComment from "./ReportComment";
 
 type ViewMode = "composite" | "raw" | "notes" | "qlq" | "info";
 
@@ -479,7 +480,10 @@ export default function PatientDashboardPage() {
           )}
         </div>
 
-        <ChemoDates code={code} />
+        <div className="space-y-2">
+          <ChemoDates code={code} />
+          <ReportComment code={code} />
+        </div>
 
         {alertGroups.length > 0 && (
           <div className="bg-white border border-gray-900 rounded-xl p-4 space-y-3">

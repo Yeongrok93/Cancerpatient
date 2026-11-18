@@ -54,6 +54,8 @@ export type ReportInput = {
   dataId?: string;
   /** Adds a screen-only "print" bar and opens the print dialog on load. */
   autoPrint?: boolean;
+  /** Researcher-written line printed last in the summary (e.g. a survey week skipped because of symptom burden). */
+  comment?: string | null;
   /** Survey window (see ReportPeriod). Without it the document behaves as "all". */
   period?: ReportPeriod;
 };
@@ -141,7 +143,7 @@ const COPY: Record<ReportLang, Copy> = {
     s3: "3. 증상 부담 추이",
     s3sub: "설문별 Grade별 증상 수",
     sTraj: "4. 증상별 변화",
-    sTrajSub: "현재 Grade 3이 아닌 증상 중 Grade 2 이상이었거나 변화가 있었던 것",
+    sTrajSub: "현재 Grade 3이 아닌 증상 중 Grade 2 이상이었던 것",
     s3recent: (n) => ` · 최근 ${n}회`,
     s4: "PRO-CTCAE 증상부담 요약",
     noSessions: "완료된 증상 설문이 없습니다.",
@@ -178,7 +180,7 @@ const COPY: Record<ReportLang, Copy> = {
     s3: "3. Symptom Burden Trend",
     s3sub: "Number of symptoms at each grade, by survey",
     sTraj: "4. Symptom Trajectories",
-    sTrajSub: "Symptoms not at Grade 3 now that reached Grade 2+ or changed",
+    sTrajSub: "Symptoms not at Grade 3 now that reached Grade 2+",
     s3recent: (n) => ` · last ${n} surveys`,
     s4: "PRO-CTCAE Symptom Burden Summary",
     noSessions: "No completed symptom survey.",
@@ -575,7 +577,7 @@ export function renderReportHtml(input: ReportInput): string {
       .filter((it) => {
         if (it.grades[last] === 3) return false;
         const g = it.grades.filter((x): x is number => x !== null);
-        return g.length > 0 && (Math.max(...g) >= 2 || new Set(it.grades.map((x) => x ?? -1)).size > 1);
+        return g.length > 0 && Math.max(...g) >= 2;
       })
       .map((it) => ({ it, lastG: it.grades[last] ?? 0, maxG: Math.max(...it.grades.map((x) => x ?? 0)) }))
       .sort((x, y) => y.lastG - x.lastG || y.maxG - x.maxG || x.it.item.id - y.it.item.id);
@@ -686,7 +688,7 @@ ${input.autoPrint ? `<div class="bar"><span>${esc(c.printBar)}</span><button onc
       ? ""
       : `<section class="notes-block">
     <h2>${trajSection ? 5 : 4}. ${esc(c.s4)}</h2>
-    ${keyFindingsHtml(keyFindings(rows, last, ref >= 0, c.refShort[refKey], lang, emph))}
+    ${keyFindingsHtml([...keyFindings(rows, last, ref >= 0, c.refShort[refKey], lang, emph), ...(input.comment?.trim() ? [`※ ${input.comment.trim()}`] : [])])}
   </section>`
   }
 
@@ -695,6 +697,23 @@ ${input.autoPrint ? `<div class="bar"><span>${esc(c.printBar)}</span><button onc
     <span>${esc(c.footerPi)}</span>
   </footer>
 </div>
+<script>
+// Keep the hand-out on one A4 page: if the content is taller than the printable area, zoom it down.
+(function () {
+  var AVAIL = (297 - 14) * 96 / 25.4 * 0.96; // A4 height minus the @page margins, in CSS px (4% slack for print rounding)
+  function fit() {
+    var p = document.querySelector(".page");
+    if (!p) return;
+    p.style.zoom = "";
+    var cs = getComputedStyle(p);
+    var h = p.scrollHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    if (h > AVAIL) p.style.zoom = String(Math.max(0.55, AVAIL / h));
+  }
+  fit();
+  window.addEventListener("load", fit);
+  window.addEventListener("beforeprint", fit);
+})();
+</script>
 ${input.autoPrint ? `<script>window.addEventListener("load", function () { setTimeout(function () { window.print(); }, 400); });</script>` : ""}
 </body>
 </html>`;
