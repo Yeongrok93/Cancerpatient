@@ -5,7 +5,7 @@
 //   GCAL_PRIVATE_KEY    its private key (the "private_key" field of the JSON key; "\n" escapes are fine)
 //   GCAL_CALENDAR_ID    the calendar shared with that service account ("Make changes to events")
 //
-// Privacy: events only say "외래 #<환자번호>" — no names or clinical text go to Google.
+// Privacy: events say "외래 #<환자번호> <이름>" — no clinical text goes to Google.
 // reconcileCalendar() is idempotent: it makes the calendar match the table, so it can run after every
 // change and daily from the cron as a safety net for edits made straight in the database.
 
@@ -72,13 +72,13 @@ function addMinutes(date: string, time: string, min: number): string {
   return new Date(Date.UTC(y, m - 1, d, hh, mm + min)).toISOString().slice(0, 19);
 }
 
-type Visit = { id: string; code: string; date: string; time: string };
+type Visit = { id: string; code: string; name: string; date: string; time: string };
 
 function toEvent(v: Visit) {
   return {
     id: `cv${v.id.replace(/-/g, "").toLowerCase()}`, // base32hex-safe: lowercase hex only
     status: "confirmed",
-    summary: `외래 #${v.code}`,
+    summary: `외래 #${v.code}${v.name ? ` ${v.name}` : ""}`,
     start: { dateTime: `${v.date}T${v.time}:00`, timeZone: "Asia/Seoul" },
     end: { dateTime: addMinutes(v.date, v.time, DURATION_MIN), timeZone: "Asia/Seoul" },
     extendedProperties: { private: { app: "cancerpatient" } },
@@ -95,14 +95,15 @@ export async function reconcileCalendar(): Promise<CalendarSync> {
   if (!c) return out;
   try {
     const rows = await sql`
-      SELECT id, patient_code, visit_date::text AS d, to_char(visit_time, 'HH24:MI') AS t
-      FROM clinic_visits
-      WHERE patient_code IS NOT NULL AND visit_date >= ((NOW() AT TIME ZONE 'Asia/Seoul')::date - ${KEEP_PAST_DAYS}::int)
-      ORDER BY visit_date, visit_time
+      SELECT v.id, v.patient_code, v.visit_date::text AS d, to_char(v.visit_time, 'HH24:MI') AS t,
+             COALESCE((SELECT p.name FROM participants p WHERE p.patient_code = v.patient_code ORDER BY p.applied_at LIMIT 1), '') AS name
+      FROM clinic_visits v
+      WHERE v.patient_code IS NOT NULL AND v.visit_date >= ((NOW() AT TIME ZONE 'Asia/Seoul')::date - ${KEEP_PAST_DAYS}::int)
+      ORDER BY v.visit_date, v.visit_time
     `;
     const want = new Map<string, ReturnType<typeof toEvent>>();
     for (const r of rows) {
-      const ev = toEvent({ id: String(r.id), code: String(r.patient_code), date: String(r.d), time: String(r.t) });
+      const ev = toEvent({ id: String(r.id), code: String(r.patient_code), name: String(r.name ?? ""), date: String(r.d), time: String(r.t) });
       want.set(ev.id, ev);
     }
 
