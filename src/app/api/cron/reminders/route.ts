@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 import { runReminders } from "@/lib/reminders";
+import { reconcileCalendar } from "@/lib/gcal";
 
 // Called once a day by Vercel Cron (see vercel.json). Vercel sends
 // `Authorization: Bearer $CRON_SECRET`; anything else is rejected.
@@ -27,7 +28,10 @@ export async function GET(req: NextRequest) {
   const today = dryRun && todayParam && /^\d{4}-\d{2}-\d{2}$/.test(todayParam) ? todayParam : undefined;
 
   try {
-    return NextResponse.json(await runReminders({ dryRun, today }));
+    const result = await runReminders({ dryRun, today });
+    // Daily safety net: picks up 외래 edits made directly in the database.
+    const calendar = dryRun ? undefined : await reconcileCalendar();
+    return NextResponse.json({ ...result, calendar });
   } catch (err) {
     console.error("Reminder run failed:", err);
     return NextResponse.json({ error: err instanceof Error ? err.message : "failed" }, { status: 500 });

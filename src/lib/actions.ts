@@ -14,6 +14,7 @@ import { headers } from "next/headers";
 import { clientIp, rateLimit } from "./rateLimit";
 import { formatMonthDay, kstToday, qlqStatus, qlqWindow } from "./surveySchedule";
 import { rewardTotal } from "./rewards";
+import { reconcileCalendar } from "./gcal";
 
 /** 증상 설문 reopens this many days after the previous one was completed. */
 const PRO_REOPEN_AFTER_DAYS = 6;
@@ -431,6 +432,8 @@ async function upsertVisit(code: string, sessionId: string, visit: { date: strin
     VALUES (${code}, ${sessionId}, ${visit.date}::date, ${visit.time}::time)
     ON CONFLICT (session_id) DO UPDATE SET visit_date = EXCLUDED.visit_date, visit_time = EXCLUDED.visit_time
   `;
+  // Mirror to Google Calendar (no-op unless configured; never throws, so a calendar problem can't block the survey).
+  await reconcileCalendar();
 }
 
 /**

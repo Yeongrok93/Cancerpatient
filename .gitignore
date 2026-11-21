@@ -41,3 +41,6 @@ next-env.d.ts
 
 # Local report previews contain patient data
 /preview/
+
+# Google service account key
+gcal-key.json
