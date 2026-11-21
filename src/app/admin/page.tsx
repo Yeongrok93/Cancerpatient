@@ -6,6 +6,7 @@ import {
   adminListPatients,
   adminListParticipants,
   adminSetStudyStartDate,
+  adminSetConsentForm,
   adminSetGender,
   adminSetEnrolled,
   type EnrollResult,
@@ -158,6 +159,26 @@ export default function AdminPage() {
     setParticipants((prev) => prev.map((p) => (p.id === id ? { ...p, study_start_date: date || null } : p)));
   }
 
+  async function saveConsent(id: string, patch: { date?: string; time?: string; received?: boolean }) {
+    const cur = participants.find((p) => p.id === id);
+    if (!cur) return;
+    const date = patch.date ?? cur.consent_form_date ?? "";
+    const time = patch.time ?? cur.consent_form_time ?? "";
+    const received = patch.received ?? cur.consent_form_received;
+    const res = await adminSetConsentForm(id, date, time, received).catch(() => ({ ok: false }));
+    if (!res.ok) {
+      alert("동의서 일정 저장에 실패했습니다.");
+      return;
+    }
+    setParticipants((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? { ...p, consent_form_date: date || null, consent_form_time: date && time ? time : null, consent_form_received: received }
+          : p
+      )
+    );
+  }
+
   async function copyLink(token: string, kind: "w0" | "pro" | "qlq", key: string) {
     const url = `${window.location.origin}/s/${token}/${kind}`;
     try {
@@ -264,6 +285,7 @@ export default function AdminPage() {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">참여자번호</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" title="체크해야 자동 안내 문자 대상이 됩니다">연구참여 확인</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">연구참여시작</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase" title="동의서 받는 날(구글 캘린더에도 올라가요)과 수령 여부">동의서</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">비고</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">설문 링크 복사</th>
                   </tr>
@@ -387,6 +409,34 @@ export default function AdminPage() {
                           onChange={(e) => saveStartDate(p.id, e.target.value)}
                           className="px-2 py-1 border border-gray-300 rounded text-xs"
                         />
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="date"
+                            value={p.consent_form_date ?? ""}
+                            onChange={(e) => saveConsent(p.id, { date: e.target.value })}
+                            className="px-2 py-1 border border-gray-300 rounded text-xs"
+                          />
+                          <input
+                            type="time"
+                            value={p.consent_form_time ?? ""}
+                            disabled={!p.consent_form_date}
+                            onChange={(e) => saveConsent(p.id, { time: e.target.value })}
+                            className="px-2 py-1 border border-gray-300 rounded text-xs disabled:opacity-40"
+                          />
+                          <label className="flex items-center gap-1 text-xs cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={p.consent_form_received}
+                              onChange={(e) => saveConsent(p.id, { received: e.target.checked })}
+                              className="w-4 h-4"
+                            />
+                            <span className={p.consent_form_received ? "text-green-700 font-medium" : "text-gray-400"}>
+                              {p.consent_form_received ? "수령" : "미수령"}
+                            </span>
+                          </label>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <input

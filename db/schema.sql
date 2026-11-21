@@ -232,3 +232,8 @@ CREATE TABLE IF NOT EXISTS chemo_dates (
 
 -- 진료용 PDF 코멘트 (연구자 입력): printed as the last line of the summary (e.g. a survey week skipped because of symptom burden).
 ALTER TABLE clinical_info ADD COLUMN IF NOT EXISTS report_comment TEXT;
+
+-- 동의서 받는 날 (연구자 입력): shown in the admin 참여신청 tab and mirrored to Google Calendar.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS consent_form_date DATE;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS consent_form_time TIME;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS consent_form_received BOOLEAN NOT NULL DEFAULT FALSE;

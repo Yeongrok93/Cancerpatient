@@ -9,6 +9,7 @@ import { sql, serialize, isUuid } from "./db";
 import { ADMIN_COOKIE_NAME, isAdminToken } from "./adminAuth";
 import { parseSex, type Sex } from "./questions";
 import { sendSms } from "./solapi";
+import { reconcileCalendar } from "./gcal";
 import { buildLinksText } from "./welcomeSms";
 import { ADC_DRUGS } from "./adcDrugs";
 import { NOTE_KIND_BY_KEY, parseNoteKind, type NoteKind } from "./noteKinds";
@@ -43,6 +44,9 @@ export type AdminParticipant = {
   enrolled_at: string | null;
   gender: Sex | null;
   remark: string | null;
+  consent_form_date: string | null;
+  consent_form_time: string | null;
+  consent_form_received: boolean;
   applicant_sms_status: "scheduled" | "failed" | "skipped" | null;
   applicant_sms_at: string | null;
   applicant_sms_error: string | null;
@@ -85,6 +89,8 @@ export async function adminListParticipants(): Promise<AdminParticipant[]> {
     SELECT id, name, record_or_birth, contact, research_types, consent_agreed, applied_at,
            patient_code, sms_notified, sms_error, study_start_date::text AS study_start_date, access_token,
            enrolled, enrolled_at, gender, remark,
+           consent_form_date::text AS consent_form_date, to_char(consent_form_time, 'HH24:MI') AS consent_form_time,
+           consent_form_received,
            applicant_sms_status, applicant_sms_at, applicant_sms_error, links_sms_status, links_sms_at, links_sms_error
     FROM participants ORDER BY applied_at DESC LIMIT 200
   `;
@@ -125,6 +131,27 @@ export async function adminSetStudyStartDate(id: string, date: string): Promise<
   if (!isUuid(id) || (value !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(value))) return { ok: false };
   if (value === "") await sql`UPDATE participants SET study_start_date = NULL WHERE id = ${id}`;
   else await sql`UPDATE participants SET study_start_date = ${value}::date WHERE id = ${id}`;
+  return { ok: true };
+}
+
+/** 동의서 받는 날 (date + optional time) and whether the form has been received. Synced to Google Calendar. */
+export async function adminSetConsentForm(
+  id: string,
+  date: string,
+  time: string,
+  received: boolean
+): Promise<{ ok: boolean }> {
+  await requireAdmin();
+  const d = String(date ?? "").trim();
+  const t = String(time ?? "").trim();
+  if (!isUuid(id) || (d !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(d)) || (t !== "" && !/^\d{2}:\d{2}$/.test(t))) return { ok: false };
+  await sql`
+    UPDATE participants SET consent_form_date = ${d === "" ? null : d}::date,
+      consent_form_time = ${d === "" || t === "" ? null : t}::time,
+      consent_form_received = ${!!received}
+    WHERE id = ${id}
+  `;
+  await reconcileCalendar();
   return { ok: true };
 }
 

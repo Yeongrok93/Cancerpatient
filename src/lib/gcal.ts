@@ -5,7 +5,7 @@
 //   GCAL_PRIVATE_KEY    its private key (the "private_key" field of the JSON key; "\n" escapes are fine)
 //   GCAL_CALENDAR_ID    the calendar shared with that service account ("Make changes to events")
 //
-// Privacy: events say "외래 #<환자번호> <이름>" — no clinical text goes to Google.
+// Events: "<이름> 외래" (clinic_visits) and "<이름> 동의서" (participants.consent_form_date). No clinical text goes to Google.
 // reconcileCalendar() is idempotent: it makes the calendar match the table, so it can run after every
 // change and daily from the cron as a safety net for edits made straight in the database.
 
@@ -72,13 +72,13 @@ function addMinutes(date: string, time: string, min: number): string {
   return new Date(Date.UTC(y, m - 1, d, hh, mm + min)).toISOString().slice(0, 19);
 }
 
-type Visit = { id: string; code: string; name: string; date: string; time: string };
+type Visit = { id: string; prefix: "cv" | "cf"; label: string; date: string; time: string };
 
 function toEvent(v: Visit) {
   return {
-    id: `cv${v.id.replace(/-/g, "").toLowerCase()}`, // base32hex-safe: lowercase hex only
+    id: `${v.prefix}${v.id.replace(/-/g, "").toLowerCase()}`, // base32hex-safe: lowercase hex only
     status: "confirmed",
-    summary: `외래 #${v.code}${v.name ? ` ${v.name}` : ""}`,
+    summary: v.label,
     start: { dateTime: `${v.date}T${v.time}:00`, timeZone: "Asia/Seoul" },
     end: { dateTime: addMinutes(v.date, v.time, DURATION_MIN), timeZone: "Asia/Seoul" },
     extendedProperties: { private: { app: "cancerpatient" } },
@@ -103,7 +103,18 @@ export async function reconcileCalendar(): Promise<CalendarSync> {
     `;
     const want = new Map<string, ReturnType<typeof toEvent>>();
     for (const r of rows) {
-      const ev = toEvent({ id: String(r.id), code: String(r.patient_code), name: String(r.name ?? ""), date: String(r.d), time: String(r.t) });
+      const who = String(r.name ?? "").trim() || `#${r.patient_code}`;
+      const ev = toEvent({ id: String(r.id), prefix: "cv", label: `${who} 외래`, date: String(r.d), time: String(r.t) });
+      want.set(ev.id, ev);
+    }
+    // 동의서 받는 날 (no time given → 10:00).
+    const consents = await sql`
+      SELECT id, name, consent_form_date::text AS d, COALESCE(to_char(consent_form_time, 'HH24:MI'), '10:00') AS t
+      FROM participants
+      WHERE consent_form_date IS NOT NULL AND consent_form_date >= ((NOW() AT TIME ZONE 'Asia/Seoul')::date - ${KEEP_PAST_DAYS}::int)
+    `;
+    for (const r of consents) {
+      const ev = toEvent({ id: String(r.id), prefix: "cf", label: `${String(r.name ?? "").trim() || "신청자"} 동의서`, date: String(r.d), time: String(r.t) });
       want.set(ev.id, ev);
     }
 
