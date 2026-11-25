@@ -62,6 +62,36 @@ npm run dev
 
 안내 문자 대상 확인: `GET /api/cron/reminders?dry=1` (`Authorization: Bearer $CRON_SECRET`) — 발송 없이 대상만 조회합니다.
 
+## 운영 현황 조회 규칙 (Claude Code 등으로 상태를 물어볼 때)
+
+"제출했나?", "문자 갔나?", "오늘 누구한테 가나?" 같은 현황 질문은 **그때마다 DB를 새로 조회한 뒤** 답합니다.
+
+1. **항상 새로 조회**: 앞선 답변이나 기억을 재사용하지 않습니다. 설문 제출·문자 발송은 수시로 바뀌므로, 같은 대화 안에서도 다시 물으면 다시 조회합니다. (낡은 값으로 답했다가 정정한 사례가 있었음)
+2. **조회 시각을 함께 표기**: DB 시각은 UTC이므로 `AT TIME ZONE 'Asia/Seoul'`로 한국 시간으로 바꿔 보여 주고, 기준 시각(`now`)을 같이 적습니다.
+3. **확인한 것과 못 한 것을 구분**: `reminder_log`의 발송 기록은 "서버가 솔라피에 요청해 성공했다"는 뜻이지 폰 도착 여부가 아닙니다(도착 여부는 솔라피 콘솔). 접속 경로는 Vercel 로그에서만 볼 수 있고 보관 기간이 짧습니다.
+4. **발송 예정은 미리보기로**: 오늘 누가 문자를 받는지는 `runReminders({ dryRun: true })` 또는 `GET /api/cron/reminders?dry=1`로 확인합니다. 조회 중에 실제 문자를 보내지 않습니다.
+5. **읽기가 기본, 쓰기는 요청받았을 때만**: 번호 부여·연구참여 확인·이름 수정 등은 요청이 있을 때만 합니다. 관리자 화면의 연구참여 확인 체크는 개인 링크 문자를 자동 발송하므로, 문자 없이 등록하려면 DB에서 직접 처리하고 `links_sms_status`를 `skipped`로 둡니다.
+6. **개인정보 최소 표시**: 연락처는 뒷 4자리만, 개인 링크는 그 환자의 링크를 요청받았을 때만 보여 줍니다.
+
+**무엇을 어디서 보는가**
+
+| 질문 | 조회 대상 |
+|---|---|
+| 설문 제출 여부 | `survey_sessions` (`survey_type`, `is_complete`, `started_at`, `completed_at`) + 응답 수. 증상은 `survey_answers`, 삶의 질은 `qlq_c30_answers`, 기본정보는 `w0_answers`에 따로 저장 (`survey_answers`만 보면 기본정보·삶의 질이 0으로 보임) |
+| 문자 발송 이력 | `reminder_log` (`pro_weekly` 안내, `pro_followup` 미응답 알림, `cycle_date`, `sent_at`) |
+| 신청자·링크 문자 상태 | `participants`의 `applicant_sms_*`, `links_sms_*`, 연구팀 알림은 `sms_notified`/`sms_error` |
+| 신청·등록 현황 | `participants` (`patient_code`가 NULL이면 번호 미부여, `enrolled`, `study_start_date`, `next_reminder_on`) |
+| 마지막 투여일 / 다음 외래 | `adc_doses`, `clinic_visits` |
+| 증상 부담 | PRO-CTCAE 복합 등급 `computeItemGrade` (`src/lib/proctcaeGrading.ts`), 데이터는 `loadReportInput` (`src/lib/reportData.ts`) |
+| 삶의 질 점수 | `src/lib/qlqScoring.ts` (EORTC QLQ-C30 채점, 기능·전반 높을수록 좋음 / 증상 높을수록 나쁨) |
+
+**자동 문자 규칙 요약**: 매일 10:00(KST) 크론 실행 · 마지막 증상설문 완료 7일 뒤 안내(놓치면 2일까지 재시도) · 안내 1일 뒤에도 미응답이면 `FOLLOWUP_NOTIFY_TO`로 알림 · 증상설문은 완료 6일 뒤부터 다시 열림 · 삶의 질은 시작 시 1회(Baseline) 후 12주마다.
+
+**조회 스크립트를 쓸 때 주의**
+- SQL에서 숫자만 남길 때는 `regexp_replace(x, '[^0-9]', '', 'g')`를 씁니다. `'\\D'`는 이 DB 드라이버에서 아무것도 지우지 못합니다.
+- `sql` 은 태그드 템플릿(`` sql`SELECT ${v}` ``) 전용입니다. 동적 SQL은 `sql.query(text, params)`를 씁니다.
+- 임시 스크립트는 프로젝트 폴더에서 `node --env-file=.env 파일명`으로 실행해야 모듈이 찾아지고, 끝나면 지웁니다. (TypeScript 모듈을 쓰는 경우 `node --env-file=.env --import tsx 파일.ts`)
+
 ## 배포
 
 `main` 브랜치에 push하면 Vercel이 자동 배포합니다.
