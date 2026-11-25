@@ -77,12 +77,14 @@ export async function loadReportInput(code: string, opts: LoadReportOptions = {}
   //  - before any 항암일 is on file (first visit): Baseline … the print date
   //  - otherwise: from 1 week before the latest 항암일 up to the print date. A 항암일 on the print date itself
   //    is the visit the document is for (treatment comes after the doctor reads it), so it does not count yet.
-  // 항암일 = researcher-entered dates (chemo_dates) + the 마지막 투여일 patients report in the 증상 설문 (adc_doses).
+  // 항암일 = researcher-entered dates (chemo_dates, 치료 기록 'chemo') + the 마지막 투여일 patients report in the 증상 설문 (adc_doses).
   const chemoDates = (
     await sql`
       SELECT chemo_date::text AS d FROM chemo_dates WHERE patient_code = ${code}
       UNION
       SELECT dose_date::text AS d FROM adc_doses WHERE patient_code = ${code} AND dose_date IS NOT NULL
+      UNION
+      SELECT start_date::text AS d FROM treatments WHERE patient_code = ${code} AND kind = 'chemo'
       ORDER BY d
     `
   ).map((r) => String(r.d));

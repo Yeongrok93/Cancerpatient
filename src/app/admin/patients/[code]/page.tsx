@@ -23,8 +23,9 @@ import QlqEditor from "./QlqEditor";
 import PatientInfoEditor from "./PatientInfoEditor";
 import ChemoDates from "./ChemoDates";
 import ReportComment from "./ReportComment";
+import TreatmentLog from "./TreatmentLog";
 
-type ViewMode = "composite" | "raw" | "notes" | "qlq" | "info";
+type ViewMode = "composite" | "raw" | "notes" | "qlq" | "treat" | "info";
 
 const TYPE_LABEL: Record<QuestionType, string> = {
   frequency: "빈도",
@@ -59,6 +60,7 @@ function ViewToggle({ view, onChange, rawCount }: { view: ViewMode; onChange: (v
     ["raw", `전체 문항 (${rawCount})`],
     ["qlq", "삶의 질 (QLQ)"],
     ["notes", "Researcher Notes"],
+    ["treat", "치료 기록"],
     ["info", "기본정보·수정"],
   ];
   const index = options.findIndex(([mode]) => mode === view);
@@ -548,6 +550,8 @@ export default function PatientDashboardPage() {
             <ResearcherNotes code={code} notes={notes} setNotes={setNotes} loading={notesLoading} />
           ) : view === "qlq" ? (
             <QlqEditor code={code} />
+          ) : view === "treat" ? (
+            <TreatmentLog code={code} />
           ) : view === "info" ? (
             <PatientInfoEditor code={code} />
           ) : sessions.length === 0 ? (

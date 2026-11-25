@@ -128,10 +128,10 @@ export async function adminSetGender(id: string, gender: string): Promise<{ ok: 
 export async function adminSetStudyStartDate(id: string, date: string): Promise<{ ok: boolean }> {
   await requireAdmin();
   const value = String(date ?? "").trim();
-  if (!isUuid(id) || (value !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(value))) return { ok: false };
-  if (value === "") await sql`UPDATE participants SET study_start_date = NULL WHERE id = ${id}`;
-  else await sql`UPDATE participants SET study_start_date = ${value}::date WHERE id = ${id}`;
-  return { ok: true };
+  if (!isUuid(id) || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return { ok: false };
+  // 연구참여시작일 is set once and then locked (only fills an empty value).
+  const rows = await sql`UPDATE participants SET study_start_date = ${value}::date WHERE id = ${id} AND study_start_date IS NULL RETURNING id`;
+  return { ok: rows.length > 0 };
 }
 
 /** 동의서 받는 날 (date + optional time) and whether the form has been received. Synced to Google Calendar. */
@@ -421,10 +421,11 @@ export async function adminUpdateParticipantInfo(
   if (start !== "" && (!/^\d{4}-\d{2}-\d{2}$/.test(start) || Number.isNaN(Date.parse(start)))) {
     return { ok: false, error: "연구참여시작일을 확인해 주세요." };
   }
+  // 연구참여시작일 is locked once set: only an empty value can be filled here.
   if (remark.length > 200) return { ok: false, error: "비고는 200자 이내로 적어 주세요." };
   await sql`
     UPDATE participants SET name = ${name}, record_or_birth = ${birth}, contact = ${contact}, gender = ${sex},
-      study_start_date = ${start === "" ? null : start}::date, remark = ${remark === "" ? null : remark}
+      study_start_date = COALESCE(study_start_date, ${start === "" ? null : start}::date), remark = ${remark === "" ? null : remark}
     WHERE id = ${id}
   `;
   return { ok: true };
@@ -723,4 +724,96 @@ export async function adminSaveReportComment(
     ON CONFLICT (patient_code) DO UPDATE SET report_comment = EXCLUDED.report_comment, updated_at = NOW()
   `;
   return { ok: true };
+}
+
+// ── 치료 기록 (항암·방사선·수술·기타, 연구자 입력) ─────────────────────────────────────────
+
+export type TreatmentKind = "chemo" | "radiation" | "surgery" | "other";
+export type Treatment = {
+  id: string;
+  kind: TreatmentKind;
+  start_date: string;
+  end_date: string | null;
+  detail: string;
+  memo: string;
+};
+export type TreatmentInput = { kind: string; start_date: string; end_date: string; detail: string; memo: string };
+
+const TREATMENT_KINDS: TreatmentKind[] = ["chemo", "radiation", "surgery", "other"];
+const ymdOk = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`));
+
+function cleanTreatment(t: TreatmentInput): { ok: true; v: Omit<Treatment, "id"> } | { ok: false; error: string } {
+  const kind = String(t?.kind ?? "") as TreatmentKind;
+  const start = String(t?.start_date ?? "").trim();
+  const end = String(t?.end_date ?? "").trim();
+  const detail = String(t?.detail ?? "").trim();
+  const memo = String(t?.memo ?? "").trim();
+  if (!TREATMENT_KINDS.includes(kind)) return { ok: false, error: "치료 종류를 선택해 주세요." };
+  if (!ymdOk(start)) return { ok: false, error: "시작일을 확인해 주세요." };
+  if (end !== "" && (!ymdOk(end) || end < start)) return { ok: false, error: "종료일을 확인해 주세요." };
+  if (detail.length > 200 || memo.length > 500) return { ok: false, error: "내용이 너무 길어요." };
+  return { ok: true, v: { kind, start_date: start, end_date: end === "" ? null : end, detail, memo } };
+}
+
+async function listTreatments(code: string): Promise<Treatment[]> {
+  const rows = await sql`
+    SELECT id, kind, start_date::text AS start_date, end_date::text AS end_date, detail, memo
+    FROM treatments WHERE patient_code = ${code} ORDER BY start_date DESC, created_at DESC
+  `;
+  return serialize(rows) as Treatment[];
+}
+
+export async function adminListTreatments(patientCode: string): Promise<Treatment[]> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  return code ? listTreatments(code) : [];
+}
+
+/** Adds (id empty) or updates one treatment row; returns the patient's full list. */
+export async function adminSaveTreatment(
+  patientCode: string,
+  id: string,
+  input: TreatmentInput
+): Promise<{ ok: true; list: Treatment[] } | { ok: false; error: string }> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  const [known] = await sql`SELECT 1 FROM participants WHERE patient_code = ${code} LIMIT 1`;
+  if (!code || !known) return { ok: false, error: "알 수 없는 환자입니다." };
+  const c = cleanTreatment(input);
+  if (!c.ok) return c;
+  const v = c.v;
+  if (id) {
+    if (!isUuid(id)) return { ok: false, error: "잘못된 요청입니다." };
+    await sql`
+      UPDATE treatments SET kind = ${v.kind}, start_date = ${v.start_date}::date, end_date = ${v.end_date}::date,
+        detail = ${v.detail}, memo = ${v.memo}, updated_at = NOW()
+      WHERE id = ${id} AND patient_code = ${code}
+    `;
+  } else {
+    await sql`
+      INSERT INTO treatments (patient_code, kind, start_date, end_date, detail, memo)
+      VALUES (${code}, ${v.kind}, ${v.start_date}::date, ${v.end_date}::date, ${v.detail}, ${v.memo})
+    `;
+  }
+  return { ok: true, list: await listTreatments(code) };
+}
+
+export async function adminDeleteTreatment(patientCode: string, id: string): Promise<{ ok: true; list: Treatment[] } | { ok: false; error: string }> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  if (!code || !isUuid(id)) return { ok: false, error: "잘못된 요청입니다." };
+  await sql`DELETE FROM treatments WHERE id = ${id} AND patient_code = ${code}`;
+  return { ok: true, list: await listTreatments(code) };
+}
+
+/** First completed survey of any kind (KST date) — shown read-only next to 연구참여시작일. */
+export async function adminGetFirstSurveyDate(patientCode: string): Promise<string | null> {
+  await requireAdmin();
+  const code = String(patientCode ?? "").trim();
+  if (!code) return null;
+  const [r] = await sql`
+    SELECT (min(completed_at) AT TIME ZONE 'Asia/Seoul')::date::text AS d
+    FROM survey_sessions WHERE patient_code = ${code} AND is_complete
+  `;
+  return r?.d ? String(r.d) : null;
 }

@@ -237,3 +237,17 @@ ALTER TABLE clinical_info ADD COLUMN IF NOT EXISTS report_comment TEXT;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS consent_form_date DATE;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS consent_form_time TIME;
 ALTER TABLE participants ADD COLUMN IF NOT EXISTS consent_form_received BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- 치료 기록 (연구자 입력, EMR 보고 기재): 항암·방사선·수술·기타. kind='chemo' 날짜는 진료용 PDF의 항암일로도 쓰여요.
+CREATE TABLE IF NOT EXISTS treatments (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  patient_code TEXT NOT NULL,
+  kind         TEXT NOT NULL CHECK (kind IN ('chemo', 'radiation', 'surgery', 'other')),
+  start_date   DATE NOT NULL,
+  end_date     DATE,
+  detail       TEXT NOT NULL DEFAULT '',
+  memo         TEXT NOT NULL DEFAULT '',
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_treatments_patient ON treatments (patient_code, start_date);

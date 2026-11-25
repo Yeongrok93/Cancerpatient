@@ -9,6 +9,7 @@ import {
   adminSaveClinicalInfo,
   type ClinicalInfo,
   adminGetParticipantInfo,
+  adminGetFirstSurveyDate,
   adminGetW0,
   adminSetW0Answer,
   adminUpdateParticipantInfo,
@@ -134,13 +135,15 @@ export default function PatientInfoEditor({ code }: { code: string }) {
   const [infoMsg, setInfoMsg] = useState("");
   const [w0Msg, setW0Msg] = useState("");
   const [savingInfo, setSavingInfo] = useState(false);
+  const [firstSurvey, setFirstSurvey] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([adminGetParticipantInfo(code), adminGetW0(code), adminGetClinicalInfo(code)])
-      .then(([p, w, c]) => {
+    Promise.all([adminGetParticipantInfo(code), adminGetW0(code), adminGetClinicalInfo(code), adminGetFirstSurveyDate(code)])
+      .then(([p, w, c, f]) => {
         if (cancelled) return;
+        setFirstSurvey(f);
         setClinical(c);
         setInfo(p);
         setW0(w);
@@ -183,6 +186,7 @@ export default function PatientInfoEditor({ code }: { code: string }) {
     const res = await adminUpdateParticipantInfo(info.id, draft).catch(() => ({ ok: false as const, error: "저장에 실패했습니다." }));
     setSavingInfo(false);
     setInfoMsg(res.ok ? "저장했어요." : res.error);
+    if (res.ok && !info.study_start_date && draft.study_start_date) setInfo({ ...info, study_start_date: draft.study_start_date });
   }
 
   async function saveW0(key: string, value: number | string | null) {
@@ -219,6 +223,36 @@ export default function PatientInfoEditor({ code }: { code: string }) {
 
   return (
     <div className="p-5 space-y-8">
+      {/* EMR 대조용 요약: 이름·생년월일·연락처·연구참여시작일(수정 불가)·첫 설문일 */}
+      <section className="max-w-3xl rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+        <dl className="grid grid-cols-2 sm:grid-cols-5 gap-x-4 gap-y-2 text-sm">
+          <div>
+            <dt className="text-xs text-gray-500">이름</dt>
+            <dd className="font-semibold text-gray-900 select-all">{info.name}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">생년월일</dt>
+            <dd className="font-mono text-gray-900 select-all">{info.record_or_birth}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">전화번호</dt>
+            <dd className="font-mono text-gray-900 select-all">
+              <a href={`tel:${info.contact.replace(/[^0-9]/g, "")}`} className="hover:underline">
+                {info.contact}
+              </a>
+            </dd>
+          </div>
+          <div title="한 번 입력하면 바꿀 수 없어요">
+            <dt className="text-xs text-gray-500">연구참여 시작일 🔒</dt>
+            <dd className="text-gray-900">{info.study_start_date ?? <span className="text-amber-700">미입력</span>}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-gray-500">첫 설문 제출일</dt>
+            <dd className="text-gray-900">{firstSurvey ?? <span className="text-gray-400">없음</span>}</dd>
+          </div>
+        </dl>
+      </section>
+
       {/* 임상정보: 연구자가 입력 (환자 설문에는 없음) */}
       <section className="space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
@@ -314,13 +348,17 @@ export default function PatientInfoEditor({ code }: { code: string }) {
               <option value="male">남성</option>
             </select>
           </Field>
-          <Field label="연구참여시작일">
-            <input
-              type="date"
-              className={`${inputCls} w-full`}
-              value={draft.study_start_date}
-              onChange={(e) => setDraft({ ...draft, study_start_date: e.target.value })}
-            />
+          <Field label="연구참여시작일 (한 번 입력하면 수정 불가)">
+            {info.study_start_date ? (
+              <div className={`${inputCls} w-full flex items-center bg-gray-100 text-gray-700`}>{info.study_start_date} 🔒</div>
+            ) : (
+              <input
+                type="date"
+                className={`${inputCls} w-full`}
+                value={draft.study_start_date}
+                onChange={(e) => setDraft({ ...draft, study_start_date: e.target.value })}
+              />
+            )}
           </Field>
           <Field label="비고">
             <input className={`${inputCls} w-full`} value={draft.remark} onChange={(e) => setDraft({ ...draft, remark: e.target.value })} />

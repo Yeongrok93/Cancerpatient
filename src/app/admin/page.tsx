@@ -402,13 +402,22 @@ export default function AdminPage() {
                           <span className="text-xs text-gray-400">번호 배정 후</span>
                         )}
                       </td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="date"
-                          value={p.study_start_date ?? ""}
-                          onChange={(e) => saveStartDate(p.id, e.target.value)}
-                          className="px-2 py-1 border border-gray-300 rounded text-xs"
-                        />
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {p.study_start_date ? (
+                          <span className="text-xs text-gray-700" title="한 번 입력하면 바꿀 수 없어요">
+                            {p.study_start_date} 🔒
+                          </span>
+                        ) : (
+                          <input
+                            type="date"
+                            value=""
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v && window.confirm(`연구참여시작일을 ${v}로 입력할까요? 입력 후에는 바꿀 수 없어요.`)) saveStartDate(p.id, v);
+                            }}
+                            className="px-2 py-1 border border-gray-300 rounded text-xs"
+                          />
+                        )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
