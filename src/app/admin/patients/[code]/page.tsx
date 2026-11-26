@@ -53,7 +53,7 @@ function splitTerm(term: string): { main: string; note: string } {
   return m ? { main: m[1], note: m[2] } : { main: term, note: "" };
 }
 
-/** Sliding pill switch between the views. */
+/** Pill tabs between the views. Natural widths; scrolls sideways instead of overflowing on narrow screens. */
 function ViewToggle({ view, onChange, rawCount }: { view: ViewMode; onChange: (v: ViewMode) => void; rawCount: number }) {
   const options: [ViewMode, string][] = [
     ["composite", "Composite Grade"],
@@ -63,32 +63,23 @@ function ViewToggle({ view, onChange, rawCount }: { view: ViewMode; onChange: (v
     ["treat", "치료 기록"],
     ["info", "기본정보·수정"],
   ];
-  const index = options.findIndex(([mode]) => mode === view);
   return (
-    <div
-      role="tablist"
-      aria-label="보기 방식"
-      className="relative inline-grid bg-gray-100 rounded-full p-1 text-sm font-medium select-none"
-      style={{ gridTemplateColumns: `repeat(${options.length}, 1fr)` }}
-    >
-      <span
-        aria-hidden
-        className="absolute top-1 bottom-1 left-1 rounded-full bg-white shadow transition-transform duration-200 ease-out"
-        style={{ width: `calc((100% - 8px) / ${options.length})`, transform: `translateX(${index * 100}%)` }}
-      />
-      {options.map(([mode, label]) => (
-        <button
-          key={mode}
-          role="tab"
-          aria-selected={view === mode}
-          onClick={() => onChange(mode)}
-          className={`relative z-10 px-4 py-1.5 rounded-full text-center whitespace-nowrap transition-colors duration-200 ${
-            view === mode ? "text-gray-900" : "text-gray-500 hover:text-gray-700"
-          }`}
-        >
-          {label}
-        </button>
-      ))}
+    <div className="min-w-0 max-w-full overflow-x-auto [scrollbar-width:none]">
+      <div role="tablist" aria-label="보기 방식" className="inline-flex gap-0.5 bg-gray-100 rounded-full p-1 text-[13px] font-medium select-none">
+        {options.map(([mode, label]) => (
+          <button
+            key={mode}
+            role="tab"
+            aria-selected={view === mode}
+            onClick={() => onChange(mode)}
+            className={`shrink-0 px-3 py-1.5 rounded-full whitespace-nowrap transition-colors duration-150 ${
+              view === mode ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -527,22 +518,18 @@ export default function PatientDashboardPage() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-wrap gap-3">
+          <div className="px-4 sm:px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
             <ViewToggle view={view} onChange={setView} rawCount={RAW_QUESTIONS.filter(({ item }) => itemApplies(item.id, sex)).length} />
-            {(view === "composite" || view === "raw") && sessions.length > 0 && (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={exportCSV}
-                  className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-                >
-                  CSV 내보내기
-                </button>
-              </div>
-            )}
           </div>
-          {view === "composite" && sessions.length > 0 && (
-            <div className="px-5 py-2.5 border-b border-gray-100">
-              <Legend />
+          {(view === "composite" || view === "raw") && sessions.length > 0 && (
+            <div className="px-4 sm:px-5 py-2.5 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+              {view === "composite" ? <Legend /> : <span />}
+              <button
+                onClick={exportCSV}
+                className="text-xs px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium whitespace-nowrap"
+              >
+                CSV 내보내기
+              </button>
             </div>
           )}
 

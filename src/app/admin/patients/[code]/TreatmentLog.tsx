@@ -1,7 +1,7 @@
 "use client";
 
 // 치료 기록 (연구자 입력, EMR 보고 기재): 항암·방사선·수술·기타.
-// 항암 기록의 시작일은 진료용 PDF의 "항암일"로도 쓰여요 (연구자 입력 항암일, 환자 보고 마지막 투여일과 함께).
+// 기록용으로만 저장해요: 진료용 PDF·리포트·캘린더 등 다른 데이터와 연동하지 않아요.
 
 import { useEffect, useState } from "react";
 import {
@@ -104,7 +104,7 @@ export default function TreatmentLog({ code }: { code: string }) {
       <section className="space-y-3 max-w-4xl">
         <div className="flex items-center gap-3 flex-wrap">
           <h2 className="text-sm font-bold text-gray-900">{editingId ? "치료 기록 수정" : "치료 기록 추가"}</h2>
-          <span className="text-xs text-gray-500">EMR 보고 입력 · 항암 기록은 진료용 PDF의 항암일로도 쓰여요</span>
+          <span className="text-xs text-gray-500">EMR 보고 입력 · 기록용 (PDF·리포트와 연동 안 됨)</span>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-[8rem_10rem_10rem_1fr] gap-2 items-end">
           <label className="block space-y-1">
