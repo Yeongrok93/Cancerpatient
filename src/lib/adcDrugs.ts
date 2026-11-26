@@ -5,6 +5,7 @@ export const ADC_DRUGS = [
   { value: "EV", label: "Enfortumab vedotin (패드세브, EV)" },
   { value: "SG", label: "Sacituzumab govitecan (트로델비, SG)" },
   { value: "PV", label: "Polatuzumab vedotin (폴라투주맙 베도틴, 폴라이비, PV)" },
+  { value: "BV", label: "Brentuximab vedotin (애드세트리스, BV)" },
 ] as const;
 
 export type AdcDrug = (typeof ADC_DRUGS)[number]["value"];
