@@ -77,7 +77,7 @@ export async function runReminders(opts: { dryRun?: boolean; today?: string } = 
       p.study_start_date::text AS start_date,
       p.next_reminder_on::text AS next_on
     FROM participants p
-    WHERE p.enrolled = TRUE AND p.patient_code IS NOT NULL AND p.access_token IS NOT NULL
+    WHERE p.enrolled = TRUE AND p.withdrawn_on IS NULL AND p.patient_code IS NOT NULL AND p.access_token IS NOT NULL
       AND p.research_types LIKE '%설문조사%'
   `;
 
@@ -151,7 +151,7 @@ async function runFollowups(today: string, dryRun: boolean): Promise<FollowupRes
   const rows = await sql`
     SELECT r.participant_id, r.cycle_date::text AS cycle, p.name, p.patient_code
     FROM reminder_log r JOIN participants p ON p.id = r.participant_id
-    WHERE r.kind = 'pro_weekly' AND p.enrolled = TRUE AND p.patient_code IS NOT NULL
+    WHERE r.kind = 'pro_weekly' AND p.enrolled = TRUE AND p.withdrawn_on IS NULL AND p.patient_code IS NOT NULL
       AND (r.sent_at AT TIME ZONE 'Asia/Seoul')::date + ${FOLLOWUP_AFTER_DAYS}::int <= ${today}::date
       AND (r.sent_at AT TIME ZONE 'Asia/Seoul')::date + ${FOLLOWUP_WINDOW_DAYS}::int >= ${today}::date
       AND NOT EXISTS (

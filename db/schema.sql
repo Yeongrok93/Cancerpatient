@@ -251,3 +251,7 @@ CREATE TABLE IF NOT EXISTS treatments (
   updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_treatments_patient ON treatments (patient_code, start_date);
+
+-- 참여중단: set when a participant leaves the study. enrolled stays TRUE (they did take part); no reminders are sent.
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS withdrawn_on DATE;
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS withdrawn_reason TEXT;

@@ -401,6 +401,12 @@ export default function PatientDashboardPage() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-xl font-bold text-gray-900">{patientLabel(code, name)}</h1>
+            {patients[currentIndex]?.withdrawn_on && (
+              <span className="px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 text-xs font-semibold text-red-700">
+                참여중단 {patients[currentIndex].withdrawn_on}
+                {patients[currentIndex].withdrawn_reason ? ` · ${patients[currentIndex].withdrawn_reason}` : ""}
+              </span>
+            )}
             <a
               href={`/api/admin/report/${encodeURIComponent(code)}?print=1`}
               target="_blank"

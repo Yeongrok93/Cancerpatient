@@ -42,6 +42,8 @@ export type AdminParticipant = {
   access_token: string | null;
   enrolled: boolean;
   enrolled_at: string | null;
+  withdrawn_on: string | null;
+  withdrawn_reason: string | null;
   gender: Sex | null;
   remark: string | null;
   consent_form_date: string | null;
@@ -63,17 +65,22 @@ export type AdminMessage = {
   is_read: boolean;
 };
 
-export type AdminPatient = { patient_code: string; name: string };
+export type AdminPatient = { patient_code: string; name: string; withdrawn_on: string | null; withdrawn_reason: string | null };
 
 /** Everyone with a participant code, in numeric order (001, 002, …). */
 export async function adminListPatients(): Promise<AdminPatient[]> {
   await requireAdmin();
   const rows = await sql`
-    SELECT DISTINCT ON (patient_code) patient_code, name
+    SELECT DISTINCT ON (patient_code) patient_code, name, withdrawn_on::text AS withdrawn_on, withdrawn_reason
     FROM participants WHERE patient_code IS NOT NULL AND trim(patient_code) <> ''
     ORDER BY patient_code, applied_at
   `;
-  const patients = rows.map((r) => ({ patient_code: String(r.patient_code), name: String(r.name ?? "") }));
+  const patients: AdminPatient[] = rows.map((r) => ({
+    patient_code: String(r.patient_code),
+    name: String(r.name ?? ""),
+    withdrawn_on: r.withdrawn_on ? String(r.withdrawn_on) : null,
+    withdrawn_reason: r.withdrawn_reason ? String(r.withdrawn_reason) : null,
+  }));
   const isNum = (c: string) => /^\d+$/.test(c);
   patients.sort((a, b) =>
     isNum(a.patient_code) && isNum(b.patient_code)
@@ -88,7 +95,7 @@ export async function adminListParticipants(): Promise<AdminParticipant[]> {
   const rows = await sql`
     SELECT id, name, record_or_birth, contact, research_types, consent_agreed, applied_at,
            patient_code, sms_notified, sms_error, study_start_date::text AS study_start_date, access_token,
-           enrolled, enrolled_at, gender, remark,
+           enrolled, enrolled_at, gender, remark, withdrawn_on::text AS withdrawn_on, withdrawn_reason,
            consent_form_date::text AS consent_form_date, to_char(consent_form_time, 'HH24:MI') AS consent_form_time,
            consent_form_received,
            applicant_sms_status, applicant_sms_at, applicant_sms_error, links_sms_status, links_sms_at, links_sms_error
@@ -175,8 +182,8 @@ export async function adminSetEnrolled(id: string, enrolled: boolean): Promise<E
   }
   await sql`UPDATE participants SET enrolled = TRUE, enrolled_at = COALESCE(enrolled_at, NOW()) WHERE id = ${id}`;
 
-  const [p] = await sql`SELECT contact, access_token, patient_code, links_sms_status FROM participants WHERE id = ${id}`;
-  if (!p || p.links_sms_status === "sent") return { ok: true };
+  const [p] = await sql`SELECT contact, access_token, patient_code, links_sms_status, withdrawn_on FROM participants WHERE id = ${id}`;
+  if (!p || p.links_sms_status === "sent" || p.withdrawn_on) return { ok: true };
 
   const phone = String(p.contact ?? "").replace(/\D/g, "");
   const sender = (process.env.SMS_SENDER ?? "").trim();

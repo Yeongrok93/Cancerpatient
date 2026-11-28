@@ -386,7 +386,14 @@ export default function AdminPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {p.patient_code ? (
+                        {p.withdrawn_on ? (
+                          <span
+                            title={p.withdrawn_reason ?? undefined}
+                            className="inline-flex px-2 py-0.5 rounded-lg border border-red-200 bg-red-50 text-xs font-medium text-red-700"
+                          >
+                            참여중단 {p.withdrawn_on.slice(5).replace("-", "/")}
+                          </span>
+                        ) : p.patient_code ? (
                           <label className="flex items-center gap-1.5 text-xs cursor-pointer">
                             <input
                               type="checkbox"
